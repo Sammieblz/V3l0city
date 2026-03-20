@@ -1,6 +1,7 @@
 import React from 'react';
-import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-
+import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { Button, Card } from 'react-native-paper';
+import { colors } from '../theme/paperTheme';
 import type { Trip } from '../domain/trip';
 
 type Props = {
@@ -12,15 +13,25 @@ const TripHistory: React.FC<Props> = ({ trips, onClear }) => {
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
-        <Text style={styles.title}>Trip history</Text>
+        <Text style={styles.title}>Trip History</Text>
         {trips.length > 0 && (
-          <TouchableOpacity style={styles.clearButton} onPress={onClear}>
-            <Text style={styles.clearText}>Clear</Text>
-          </TouchableOpacity>
+          <Button
+            mode="text"
+            textColor={colors.danger}
+            compact
+            onPress={onClear}
+          >
+            Clear All
+          </Button>
         )}
       </View>
       {trips.length === 0 ? (
-        <Text style={styles.emptyText}>No trips recorded yet.</Text>
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>No trips recorded yet.</Text>
+          <Text style={styles.emptyHint}>
+            Start a trip from the dashboard to track your speed and distance.
+          </Text>
+        </View>
       ) : (
         <FlatList
           data={trips}
@@ -29,6 +40,8 @@ const TripHistory: React.FC<Props> = ({ trips, onClear }) => {
           renderItem={({ item }) => {
             const start = new Date(item.startedAt);
             const end = new Date(item.endedAt);
+            const durationMs = end.getTime() - start.getTime();
+            const durationMin = Math.round(durationMs / 60000);
             const distanceKm = item.totalDistanceMeters / 1000;
             const avgSpeedDisplay =
               item.units === 'km/h'
@@ -40,26 +53,55 @@ const TripHistory: React.FC<Props> = ({ trips, onClear }) => {
                 : item.maxSpeedMps * 2.23694;
 
             return (
-              <View style={styles.tripCard}>
-                <Text style={styles.tripDate}>
-                  {start.toLocaleDateString()} {start.toLocaleTimeString()}
-                </Text>
-                <Text style={styles.tripLine}>
-                  Distance: {distanceKm.toFixed(1)} km
-                </Text>
-                <Text style={styles.tripLine}>
-                  Avg: {avgSpeedDisplay.toFixed(1)} {item.units}
-                </Text>
-                <Text style={styles.tripLine}>
-                  Max: {maxSpeedDisplay.toFixed(1)} {item.units}
-                </Text>
-                <Text style={styles.tripMeta}>
-                  Mount: {item.mountLabel ?? 'unknown'}
-                </Text>
-                <Text style={styles.tripMeta}>
-                  Ended: {end.toLocaleTimeString()}
-                </Text>
-              </View>
+              <Card style={styles.tripCard} mode="contained">
+                <Card.Content>
+                  <View style={styles.tripHeader}>
+                    <Text style={styles.tripDate}>
+                      {start.toLocaleDateString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })}
+                    </Text>
+                    <Text style={styles.tripDuration}>
+                      {durationMin > 0 ? `${durationMin} min` : '< 1 min'}
+                    </Text>
+                  </View>
+                  <View style={styles.tripStats}>
+                    <View style={styles.tripStat}>
+                      <Text style={styles.statValue}>
+                        {distanceKm.toFixed(1)}
+                      </Text>
+                      <Text style={styles.statLabel}>
+                        {item.units === 'km/h' ? 'km' : 'mi'}
+                      </Text>
+                    </View>
+                    <View style={styles.tripStat}>
+                      <Text style={styles.statValue}>
+                        {Math.round(avgSpeedDisplay)}
+                      </Text>
+                      <Text style={styles.statLabel}>avg {item.units}</Text>
+                    </View>
+                    <View style={styles.tripStat}>
+                      <Text style={styles.statValue}>
+                        {Math.round(maxSpeedDisplay)}
+                      </Text>
+                      <Text style={styles.statLabel}>max {item.units}</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.tripTime}>
+                    {start.toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}{' '}
+                    -{' '}
+                    {end.toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </Text>
+                </Card.Content>
+              </Card>
             );
           }}
         />
@@ -72,60 +114,86 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 16,
-    paddingTop: 24,
-    width: '100%',
+    paddingTop: 16,
   },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   title: {
-    color: 'white',
+    color: colors.textPrimary,
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingBottom: 80,
+  },
+  emptyText: {
+    color: colors.textSecondary,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  emptyHint: {
+    color: colors.textMuted,
+    fontSize: 13,
+    marginTop: 8,
+    textAlign: 'center',
+    paddingHorizontal: 40,
+  },
+  listContent: {
+    paddingBottom: 24,
+  },
+  tripCard: {
+    backgroundColor: colors.surfaceVariant,
+    marginBottom: 10,
+    borderRadius: 12,
+  },
+  tripHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  tripDate: {
+    color: colors.textPrimary,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  tripDuration: {
+    color: colors.textMuted,
+    fontSize: 12,
+  },
+  tripStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 8,
+  },
+  tripStat: {
+    alignItems: 'center',
+  },
+  statValue: {
+    color: colors.textPrimary,
     fontSize: 20,
     fontWeight: '700',
   },
-  clearButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: '#555',
+  statLabel: {
+    color: colors.textMuted,
+    fontSize: 10,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    marginTop: 2,
   },
-  clearText: {
-    color: '#FF6666',
-    fontSize: 12,
-  },
-  emptyText: {
-    marginTop: 16,
-    color: '#CCCCCC',
-    fontSize: 14,
-  },
-  listContent: {
-    paddingVertical: 8,
-  },
-  tripCard: {
-    backgroundColor: '#111111',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-  },
-  tripDate: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  tripLine: {
-    color: '#DDDDDD',
-    fontSize: 13,
-  },
-  tripMeta: {
-    color: '#999999',
+  tripTime: {
+    color: colors.textMuted,
     fontSize: 11,
+    textAlign: 'center',
   },
 });
 
 export default TripHistory;
-

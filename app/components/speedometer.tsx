@@ -1,24 +1,45 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Animated as RNAnimated,
+  AppState,
+  Easing,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Appbar,
   Button,
+  List,
   Modal,
   Portal,
+  Snackbar,
   SegmentedButtons,
-  Surface,
 } from 'react-native-paper';
 
 import AverageSpeedDisplay from './AverageSpeedDisplay';
-import Compass from './Compass';
+import SpeedDial from './SpeedDial';
+import HorizontalCompass from './HorizontalCompass';
+import MiniCompass from './MiniCompass';
 import DebugOverlay from './DebugOverlay';
 import TripHistory from './TripHistory';
-import ResetButton from './ResetButton';
 import { useVelocitySensors } from '../hooks/useVelocitySensors';
 import { toDisplayDistance, toDisplaySpeed, type Units } from '../utils/speedMath';
 import type { Trip } from '../domain/trip';
-import { clearTrips, getTrips, saveTrip } from '../storage/tripStorage';
-import { getPreferences, savePreferences } from '../storage/preferencesStorage';
+import { clearTrips, getTrips, saveTrip } from '../database/tripRepository';
+import {
+  getPreferences,
+  savePreferences,
+  type OrientationMode,
+} from '../database/preferencesRepository';
+import { colors } from '../theme/paperTheme';
+import { scheduleTripSavedNotification } from '../utils/notifications';
+import { exportAsJson, exportAsCsv } from '../database/exportService';
+import * as ScreenOrientation from 'expo-screen-orientation';
 
 const MOUNT_OPTIONS = [
   { label: 'top', offset: 0 },
@@ -30,17 +51,62 @@ const MOUNT_OPTIONS = [
 export default function Speedometer() {
   const [units, setUnits] = useState<Units>('km/h');
   const [mountIndex, setMountIndex] = useState(0);
+  const [autoStart, setAutoStart] = useState(false);
+  const [autoSave, setAutoSave] = useState(false);
+  const [orientationMode, setOrientationMode] =
+    useState<OrientationMode>('portrait');
+  const [currentOrientation, setCurrentOrientation] = useState<
+    'portrait' | 'landscape'
+  >('portrait');
   const [isTripActive, setIsTripActive] = useState(false);
+  const [isTripPaused, setIsTripPaused] = useState(false);
   const [currentTripStart, setCurrentTripStart] = useState<Date | null>(null);
+  const [elapsedMs, setElapsedMs] = useState(0);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [debugEnabled, setDebugEnabled] = useState<boolean>(__DEV__);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const pulseAnim = useRef(new RNAnimated.Value(1)).current;
+  const appState = useRef(AppState.currentState);
+  const prevStatus = useRef<string | null>(null);
+  const orientationListener = useRef<ScreenOrientation.Subscription | null>(
+    null,
+  );
+  // When auto-start is on, we only start once per "trip ended"; reset when trip stops/saves so next motion can auto-start again.
+  const hasAutoStartedThisSession = useRef(false);
+
+  useEffect(() => {
+    if (isTripActive) {
+      const loop = RNAnimated.loop(
+        RNAnimated.sequence([
+          RNAnimated.timing(pulseAnim, {
+            toValue: 0.4,
+            duration: 1000,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          RNAnimated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1000,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+      loop.start();
+      return () => loop.stop();
+    }
+    pulseAnim.setValue(1);
+  }, [isTripActive]);
 
   const mountOffset = MOUNT_OPTIONS[mountIndex].offset;
   const mountLabel = MOUNT_OPTIONS[mountIndex].label;
   const { state, reset } = useVelocitySensors({
     mountOffsetDegrees: mountOffset,
+    accumulateTrip: isTripActive && !isTripPaused,
   });
 
   const {
@@ -52,6 +118,7 @@ export default function Speedometer() {
     errorMessage,
     quality,
     status,
+    source,
   } = useMemo(() => {
     return {
       speedMps: state.speedMps,
@@ -62,8 +129,34 @@ export default function Speedometer() {
       errorMessage: state.errorMessage,
       quality: state.quality,
       status: state.status,
+      source: state.source,
     };
   }, [state]);
+
+  const applyOrientation = async (mode: OrientationMode) => {
+    try {
+      if (mode === 'portrait') {
+        await ScreenOrientation.lockAsync(
+          ScreenOrientation.OrientationLock.PORTRAIT_UP,
+        );
+        setCurrentOrientation('portrait');
+      } else if (mode === 'landscape') {
+        await ScreenOrientation.lockAsync(
+          ScreenOrientation.OrientationLock.LANDSCAPE,
+        );
+        setCurrentOrientation('landscape');
+      } else {
+        await ScreenOrientation.unlockAsync();
+        const orientationInfo = await ScreenOrientation.getOrientationAsync();
+        const isLandscape =
+          orientationInfo === ScreenOrientation.Orientation.LANDSCAPE_LEFT ||
+          orientationInfo === ScreenOrientation.Orientation.LANDSCAPE_RIGHT;
+        setCurrentOrientation(isLandscape ? 'landscape' : 'portrait');
+      }
+    } catch {
+      // Ignore orientation errors (e.g., web or unsupported platforms).
+    }
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -76,47 +169,102 @@ export default function Speedometer() {
         if (prefs.mountIndex >= 0 && prefs.mountIndex < MOUNT_OPTIONS.length) {
           setMountIndex(prefs.mountIndex);
         }
+        setAutoStart(prefs.autoStart ?? false);
+        setAutoSave(prefs.autoSave ?? false);
+          setOrientationMode(prefs.orientationMode ?? 'portrait');
       }
       setTrips(storedTrips);
+      await applyOrientation(prefs?.orientationMode ?? 'portrait');
     };
     void load();
   }, []);
 
   useEffect(() => {
     const persist = async () => {
-      await savePreferences({ units, mountIndex });
+      await savePreferences({
+        units,
+        mountIndex,
+        autoStart,
+        autoSave,
+        orientationMode,
+      });
     };
     void persist();
-  }, [units, mountIndex]);
+  }, [units, mountIndex, autoStart, autoSave, orientationMode]);
 
-  const handleReset = () => {
-    reset();
-  };
+  // Listen to device orientation when in auto mode.
+  useEffect(() => {
+    const setupListener = async () => {
+      if (orientationMode !== 'auto') {
+        if (orientationListener.current) {
+          ScreenOrientation.removeOrientationChangeListener(
+            orientationListener.current,
+          );
+          orientationListener.current = null;
+        }
+        return;
+      }
+
+      try {
+        const info = await ScreenOrientation.getOrientationAsync();
+        const isLandscape =
+          info === ScreenOrientation.Orientation.LANDSCAPE_LEFT ||
+          info === ScreenOrientation.Orientation.LANDSCAPE_RIGHT;
+        setCurrentOrientation(isLandscape ? 'landscape' : 'portrait');
+
+        const sub = await ScreenOrientation.addOrientationChangeListener(
+          (event) => {
+            const o = event.orientationInfo.orientation;
+            const landscape =
+              o === ScreenOrientation.Orientation.LANDSCAPE_LEFT ||
+              o === ScreenOrientation.Orientation.LANDSCAPE_RIGHT;
+            setCurrentOrientation(landscape ? 'landscape' : 'portrait');
+          },
+        );
+        orientationListener.current = sub;
+      } catch {
+        // Ignore.
+      }
+    };
+
+    void setupListener();
+
+    return () => {
+      if (orientationListener.current) {
+        ScreenOrientation.removeOrientationChangeListener(
+          orientationListener.current,
+        );
+        orientationListener.current = null;
+      }
+    };
+  }, [orientationMode]);
 
   const speedDisplay = toDisplaySpeed(speedMps, units);
   const averageDisplay = toDisplaySpeed(averageSpeedMps, units);
   const maxDisplay = toDisplaySpeed(maxSpeedMps, units);
   const distanceDisplay = toDisplayDistance(distanceMeters, units);
+  const maxDisplayRounded = Math.round(maxDisplay);
 
   const isPoorSignal = quality === 'poor';
   const isPermissionError = status === 'permission_denied';
   const isSensorUnavailable = status === 'sensor_unavailable';
 
-  const handleStartTrip = () => {
-    if (isTripActive) {
-      return;
-    }
+  const showToast = (message: string) => {
+    setToastMessage(message);
+  };
+
+  const startTrip = () => {
+    if (isTripActive) return;
+    reset();
     setIsTripActive(true);
+    setIsTripPaused(false);
     setCurrentTripStart(new Date());
   };
 
-  const handleStopTrip = async () => {
-    if (!isTripActive) {
-      return;
-    }
+  const stopAndSaveTrip = async () => {
+    if (!isTripActive) return;
     const end = new Date();
     const start = currentTripStart ?? end;
-
     const trip: Trip = {
       id: `${start.getTime()}-${end.getTime()}`,
       startedAt: start.toISOString(),
@@ -132,7 +280,28 @@ export default function Speedometer() {
     const stored = await getTrips();
     setTrips(stored);
     setIsTripActive(false);
+    setIsTripPaused(false);
     setCurrentTripStart(null);
+    hasAutoStartedThisSession.current = false;
+
+    // Fire a local notification for manual saves.
+    void scheduleTripSavedNotification(trip);
+  };
+
+  const handleTripToggle = async () => {
+    if (!isTripActive) {
+      startTrip();
+      showToast('Trip started');
+      return;
+    }
+
+    await stopAndSaveTrip();
+    showToast('Trip saved');
+  };
+
+  const handleReset = () => {
+    reset();
+    setElapsedMs(0);
   };
 
   const handleClearHistory = async () => {
@@ -140,13 +309,120 @@ export default function Speedometer() {
     setTrips([]);
   };
 
-  const renderDashboard = () => {
+  const canReset = !isTripActive && distanceMeters > 0;
+
+  // Track elapsed time for the current trip.
+  useEffect(() => {
+    if (!isTripActive || !currentTripStart) {
+      setElapsedMs(0);
+      return;
+    }
+
+    const update = () => {
+      setElapsedMs(Date.now() - currentTripStart.getTime());
+    };
+
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  }, [isTripActive, currentTripStart]);
+
+  // Auto-start when motion is detected (sustained speed above threshold), only when auto-start is enabled.
+  useEffect(() => {
+    if (
+      autoStart &&
+      !isTripActive &&
+      !isPermissionError &&
+      !isSensorUnavailable &&
+      state.isMoving &&
+      !hasAutoStartedThisSession.current
+    ) {
+      hasAutoStartedThisSession.current = true;
+      startTrip();
+      showToast('Trip autostarted');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart, isTripActive, isPermissionError, isSensorUnavailable, state.isMoving]);
+
+  // Auto-pause when stopped (sustained speed below threshold); only when auto-start is on.
+  useEffect(() => {
+    if (
+      autoStart &&
+      isTripActive &&
+      !isTripPaused &&
+      !isPermissionError &&
+      !isSensorUnavailable &&
+      state.isStopped
+    ) {
+      setIsTripPaused(true);
+      showToast('Trip paused');
+    }
+  }, [autoStart, isTripActive, isTripPaused, isPermissionError, isSensorUnavailable, state.isStopped]);
+
+  // Auto-resume when motion detected again after a pause.
+  useEffect(() => {
+    if (
+      autoStart &&
+      isTripActive &&
+      isTripPaused &&
+      !isPermissionError &&
+      !isSensorUnavailable &&
+      state.isMoving
+    ) {
+      setIsTripPaused(false);
+      showToast('Trip resumed');
+    }
+  }, [autoStart, isTripActive, isTripPaused, isPermissionError, isSensorUnavailable, state.isMoving]);
+
+  // Autosave / autostop when app goes to background.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', async (nextState) => {
+      const prevState = appState.current;
+      appState.current = nextState;
+      if (
+        prevState === 'active' &&
+        (nextState === 'background' || nextState === 'inactive') &&
+        isTripActive &&
+        (autoStart || autoSave)
+      ) {
+        try {
+          await stopAndSaveTrip();
+          showToast('Trip auto-saved');
+          // Background autosave notification; details were handled inside stopAndSaveTrip.
+        } catch {
+          // Ignore autosave failures; trip will simply end without history update.
+        }
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [autoStart, autoSave, isTripActive, stopAndSaveTrip]);
+
+  // Sensor / permission status toasts.
+  useEffect(() => {
+    if (prevStatus.current === status) {
+      return;
+    }
+    if (status === 'permission_denied') {
+      showToast('Location permission denied');
+    } else if (status === 'sensor_unavailable') {
+      showToast('Required sensors unavailable on this device');
+    } else if (status === 'ready') {
+      showToast('Sensors ready');
+    }
+    prevStatus.current = status;
+  }, [status]);
+
+  const renderPortraitDashboard = () => {
     if (isPermissionError) {
       return (
         <View style={styles.messageContainer}>
-          <Text style={styles.messageTitle}>Location permission required</Text>
+          <Text style={styles.messageTitle}>Location Permission Required</Text>
           <Text style={styles.messageBody}>
-            Enable location access in your device settings to see speed and distance.
+            Enable location access in your device settings to see speed and
+            distance.
           </Text>
         </View>
       );
@@ -155,155 +431,342 @@ export default function Speedometer() {
     if (isSensorUnavailable) {
       return (
         <View style={styles.messageContainer}>
-          <Text style={styles.messageTitle}>Sensors unavailable</Text>
+          <Text style={styles.messageTitle}>Sensors Unavailable</Text>
           <Text style={styles.messageBody}>
-            This device does not expose the motion or location sensors required for
-            Velocity.
+            This device does not expose the motion or location sensors required
+            for V3locity.
           </Text>
         </View>
       );
     }
 
     if (errorMessage) {
-      return <Text style={styles.errorText}>{errorMessage}</Text>;
+      return (
+        <View style={styles.messageContainer}>
+          <Text style={styles.errorText}>{errorMessage}</Text>
+        </View>
+      );
     }
 
+    const maxScale =
+      speedDisplay > 160 ? 300 : speedDisplay > 80 ? 200 : 160;
+
     return (
-      <>
-        <View style={styles.speedometerContainer}>
-          <Surface style={styles.speedometerSurface} elevation={3}>
-            <View
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.dialContainer}>
+          <SpeedDial
+            speed={speedDisplay}
+            maxScale={maxScale}
+            units={units}
+            isPoorSignal={isPoorSignal}
+          />
+        </View>
+
+        {(!autoStart || isTripActive) && (
+          <View style={styles.tripSection}>
+            {isTripPaused && (
+              <Text style={styles.tripPausedLabel}>Trip paused</Text>
+            )}
+            <TouchableOpacity
               style={[
-                styles.speedometer,
-                isPoorSignal && styles.speedometerDegraded,
+                styles.tripButton,
+                isTripActive ? styles.tripButtonActive : styles.tripButtonIdle,
               ]}
+              onPress={handleTripToggle}
+              activeOpacity={0.8}
             >
+              {isTripActive && !isTripPaused && (
+                <RNAnimated.View
+                  style={[styles.recordDot, { opacity: pulseAnim }]}
+                />
+              )}
               <Text
                 style={[
-                  styles.speed,
-                  isPoorSignal && styles.speedDegradedText,
+                  styles.tripButtonText,
+                  isTripActive && styles.tripButtonTextActive,
                 ]}
               >
-                {speedDisplay.toFixed(1)}
+                {isTripPaused
+                  ? 'Save & end'
+                  : isTripActive
+                    ? 'Stop & Save'
+                    : 'Start Trip'}
               </Text>
-              <Text style={styles.unitsLabel}>{units}</Text>
-            </View>
-          </Surface>
-        </View>
+            </TouchableOpacity>
+            {canReset && (
+              <TouchableOpacity
+                style={styles.resetButton}
+                onPress={handleReset}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.resetText}>Reset</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
 
-        <View style={styles.buttonContainer}>
-          <SegmentedButtons
-            style={styles.unitSegment}
-            value={units}
-            onValueChange={(value) => setUnits(value as Units)}
-            buttons={[
-              { value: 'km/h', label: 'km/h' },
-              { value: 'MPH', label: 'MPH' },
-            ]}
-          />
-          <View style={styles.tripButtonsRow}>
-            <Button
-              mode="contained"
-              style={styles.tripPrimaryButton}
-              onPress={handleStartTrip}
-              disabled={isTripActive}
-            >
-              Start
-            </Button>
-            <Button
-              mode="outlined"
-              style={styles.tripSecondaryButton}
-              onPress={handleStopTrip}
-              disabled={!isTripActive}
-            >
-              Stop &amp; Save
-            </Button>
+        <View style={styles.statsRow}>
+          <View style={styles.statItem}>
+            <AverageSpeedDisplay
+              averageSpeed={averageDisplay}
+              unitLabel={units}
+            />
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statLabel}>MAX</Text>
+            <Text style={styles.statValue}>{maxDisplayRounded}</Text>
+            <Text style={styles.statUnit}>{units}</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statLabel}>DIST</Text>
+            <Text style={styles.statValue}>
+              {distanceDisplay.toFixed(1)}
+            </Text>
+            <Text style={styles.statUnit}>
+              {units === 'km/h' ? 'km' : 'mi'}
+            </Text>
           </View>
         </View>
 
-        <Surface style={styles.statsSurface} elevation={2}>
-          <View style={styles.metricsRow}>
-            <View style={styles.metric}>
-              <AverageSpeedDisplay
-                averageSpeed={averageDisplay}
-                unitLabel={units}
-              />
-            </View>
-            <View style={styles.metric}>
-              <Text style={styles.infoLabel}>max</Text>
-              <Text style={styles.infoValue}>{maxDisplay.toFixed(1)}</Text>
-              <Text style={styles.infoUnit}>{units}</Text>
-            </View>
-            <View style={styles.metric}>
-              <Text style={styles.infoLabel}>distance</Text>
-              <Text style={styles.infoValue}>{distanceDisplay.toFixed(1)}</Text>
-              <Text style={styles.infoUnit}>
-                {units === 'km/h' ? 'km' : 'mi'}
-              </Text>
-            </View>
+        <View style={styles.compassSection}>
+          <HorizontalCompass heading={headingDegrees} />
+          <View style={styles.miniCompassRow}>
+            <MiniCompass heading={headingDegrees} />
           </View>
-        </Surface>
-
-        <Surface style={styles.mountSurface} elevation={2}>
-          <Text style={styles.mountLabel}>Mount position</Text>
-          <SegmentedButtons
-            style={styles.mountSegment}
-            value={String(mountIndex)}
-            onValueChange={(value) =>
-              setMountIndex(Number.parseInt(value, 10) || 0)
-            }
-            buttons={MOUNT_OPTIONS.map((option, index) => ({
-              value: String(index),
-              label: option.label.toUpperCase(),
-            }))}
-          />
-        </Surface>
-
-        <Surface style={styles.compassSurface} elevation={2}>
-          <Text style={styles.compassTitle}>Compass</Text>
-          <Compass heading={headingDegrees} />
-        </Surface>
-        <ResetButton onPress={handleReset} />
-        <DebugOverlay state={state} enabled={debugEnabled} />
-      </>
+        </View>
+      </ScrollView>
     );
   };
 
+  const renderLandscapeDashboard = () => {
+    const maxScale =
+      speedDisplay > 160 ? 300 : speedDisplay > 80 ? 200 : 160;
+
+    return (
+      <View style={styles.landscapeRoot}>
+        <View style={styles.landscapeLeft}>
+          <SpeedDial
+            speed={speedDisplay}
+            maxScale={maxScale}
+            units={units}
+            isPoorSignal={isPoorSignal}
+          />
+        </View>
+        <View style={styles.landscapeRight}>
+          <View style={styles.landscapeStatsGrid}>
+            <View style={styles.landscapeStat}>
+              <Text style={styles.landscapeStatLabel}>Duration</Text>
+              <Text style={styles.landscapeStatValue}>
+                {new Date(elapsedMs).toISOString().substring(11, 19)}
+              </Text>
+            </View>
+            <View style={styles.landscapeStat}>
+              <Text style={styles.landscapeStatLabel}>Maximum</Text>
+              <Text style={styles.landscapeStatValue}>
+                {maxDisplayRounded} {units}
+              </Text>
+            </View>
+            <View style={styles.landscapeStat}>
+              <Text style={styles.landscapeStatLabel}>Distance</Text>
+              <Text style={styles.landscapeStatValue}>
+                {distanceDisplay.toFixed(1)}{' '}
+                {units === 'km/h' ? 'km' : 'mi'}
+              </Text>
+            </View>
+            <View style={styles.landscapeStat}>
+              <Text style={styles.landscapeStatLabel}>Average</Text>
+              <Text style={styles.landscapeStatValue}>
+                {Math.round(averageDisplay)} {units}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.landscapeCompassBlock}>
+            <HorizontalCompass heading={headingDegrees} />
+            <View style={styles.landscapeMiniCompassRow}>
+              <MiniCompass heading={headingDegrees} />
+            </View>
+          </View>
+
+          {(!autoStart || isTripActive) && (
+            <View style={styles.landscapeTripButtonRow}>
+              {isTripPaused && (
+                <Text style={styles.tripPausedLabel}>Trip paused</Text>
+              )}
+              <TouchableOpacity
+                style={[
+                  styles.landscapeTripButton,
+                  isTripActive
+                    ? styles.landscapeTripButtonActive
+                    : styles.landscapeTripButtonIdle,
+                ]}
+                onPress={handleTripToggle}
+                activeOpacity={0.85}
+              >
+                {isTripActive && !isTripPaused && (
+                  <RNAnimated.View
+                    style={[styles.recordDot, { opacity: pulseAnim }]}
+                  />
+                )}
+                <Text style={styles.landscapeTripButtonText}>
+                  {isTripPaused
+                    ? 'Save & end'
+                    : isTripActive
+                      ? 'Stop & Save'
+                      : 'Start'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      </View>
+    );
+  };
+
+  const isLandscapeLayout =
+    orientationMode === 'landscape' ||
+    (orientationMode === 'auto' && currentOrientation === 'landscape');
+
+  const openDrawer = () => setDrawerOpen(true);
+  const closeDrawer = () => setDrawerOpen(false);
+
+  const handleDrawerHistory = () => {
+    setShowHistory(true);
+    closeDrawer();
+  };
+
+  const handleDrawerSettings = () => {
+    setShowSettings(true);
+    closeDrawer();
+  };
+
+  const handleExportJson = async () => {
+    closeDrawer();
+    try {
+      await exportAsJson();
+    } catch {
+      showToast('Export failed');
+    }
+  };
+
+  const handleExportCsv = async () => {
+    closeDrawer();
+    try {
+      await exportAsCsv();
+    } catch {
+      showToast('Export failed');
+    }
+  };
+
+  const insets = useSafeAreaInsets();
+
   return (
-    <SafeAreaView style={styles.container}>
-      <Appbar.Header mode="center-aligned">
-        <Appbar.Content title="Velocity" />
+    <View style={styles.container}>
+      <View style={styles.headerWrapper}>
+        <Appbar.Header
+          style={[styles.appbar, { paddingTop: insets.top }]}
+          mode="center-aligned"
+        >
+        {showHistory ? (
+          <Appbar.BackAction
+            onPress={() => setShowHistory(false)}
+            color={colors.textSecondary}
+          />
+        ) : (
+          <Appbar.Action
+            icon="menu"
+            iconColor={colors.textSecondary}
+            onPress={openDrawer}
+          />
+        )}
+        <Appbar.Content
+          title={showHistory ? 'History' : 'V3locity'}
+          titleStyle={styles.appbarTitle}
+        />
         <Appbar.Action
-          icon="cog-outline"
-          onPress={() => setShowSettings((prev) => !prev)}
+          icon={isLandscapeLayout ? 'tablet' : 'cellphone'}
+          iconColor={colors.textSecondary}
+          onPress={() => {
+            const nextMode: OrientationMode = isLandscapeLayout
+              ? 'portrait'
+              : 'landscape';
+            setOrientationMode(nextMode);
+            void applyOrientation(nextMode);
+          }}
         />
       </Appbar.Header>
-      <View style={styles.tabRow}>
-        <SegmentedButtons
-          value={showHistory ? 'history' : 'dashboard'}
-          onValueChange={(value) => setShowHistory(value === 'history')}
-          buttons={[
-            { value: 'dashboard', label: 'Dashboard' },
-            { value: 'history', label: 'History' },
-          ]}
-        />
       </View>
+
       {showHistory ? (
         <TripHistory trips={trips} onClear={handleClearHistory} />
       ) : (
-        renderDashboard()
+        isLandscapeLayout
+          ? renderLandscapeDashboard()
+          : renderPortraitDashboard()
       )}
+
       <Portal>
+        <Modal
+          visible={drawerOpen}
+          onDismiss={closeDrawer}
+          contentContainerStyle={styles.drawerOverlay}
+        >
+          <View style={styles.drawerPanel}>
+            <Text style={styles.drawerTitle}>Menu</Text>
+            <List.Item
+              title="History"
+              description="View trip history"
+              left={(props) => <List.Icon {...props} icon="history" />}
+              onPress={handleDrawerHistory}
+              style={styles.drawerItem}
+              titleStyle={styles.drawerItemTitle}
+            />
+            <List.Item
+              title="Settings"
+              description="Units, orientation, and more"
+              left={(props) => <List.Icon {...props} icon="cog" />}
+              onPress={handleDrawerSettings}
+              style={styles.drawerItem}
+              titleStyle={styles.drawerItemTitle}
+            />
+            <List.Item
+              title="Export as JSON"
+              description="Trips and preferences"
+              left={(props) => <List.Icon {...props} icon="code-json" />}
+              onPress={handleExportJson}
+              style={styles.drawerItem}
+              titleStyle={styles.drawerItemTitle}
+            />
+            <List.Item
+              title="Export as CSV"
+              description="Trip data as spreadsheet"
+              left={(props) => <List.Icon {...props} icon="file-delimited" />}
+              onPress={handleExportCsv}
+              style={styles.drawerItem}
+              titleStyle={styles.drawerItemTitle}
+            />
+          </View>
+          <TouchableWithoutFeedback onPress={closeDrawer}>
+            <View style={styles.drawerBackdrop} />
+          </TouchableWithoutFeedback>
+        </Modal>
+
         <Modal
           visible={showSettings}
           onDismiss={() => setShowSettings(false)}
-          contentContainerStyle={styles.settingsPanel}
+          contentContainerStyle={styles.settingsSheet}
         >
+          <View style={styles.settingsHandle} />
           <Text style={styles.settingsTitle}>Settings</Text>
+
           <View style={styles.settingsRow}>
             <Text style={styles.settingsLabel}>Units</Text>
             <SegmentedButtons
-              style={styles.settingsButtonsRow}
               value={units}
               onValueChange={(value) => setUnits(value as Units)}
               buttons={[
@@ -311,14 +774,11 @@ export default function Speedometer() {
                 { value: 'MPH', label: 'MPH' },
               ]}
             />
-            <Text style={styles.settingsHelper}>
-              Affects how speed and distance are displayed.
-            </Text>
           </View>
+
           <View style={styles.settingsRow}>
-            <Text style={styles.settingsLabel}>Mount position</Text>
+            <Text style={styles.settingsLabel}>Mount Position</Text>
             <SegmentedButtons
-              style={styles.settingsButtonsRow}
               value={String(mountIndex)}
               onValueChange={(value) =>
                 setMountIndex(Number.parseInt(value, 10) || 0)
@@ -328,12 +788,67 @@ export default function Speedometer() {
                 label: option.label.toUpperCase(),
               }))}
             />
+            <Text style={styles.settingsHelper}>
+              Select where the phone is mounted in your vehicle.
+            </Text>
           </View>
+
+          <View style={styles.settingsRow}>
+            <Text style={styles.settingsLabel}>Autostart trip</Text>
+            <SegmentedButtons
+              value={autoStart ? 'on' : 'off'}
+              onValueChange={(value) => setAutoStart(value === 'on')}
+              buttons={[
+                { value: 'off', label: 'Off' },
+                { value: 'on', label: 'On' },
+              ]}
+            />
+            <Text style={styles.settingsHelper}>
+              Start a trip automatically when motion is detected.
+            </Text>
+          </View>
+
+          <View style={styles.settingsRow}>
+            <Text style={styles.settingsLabel}>Autosave on exit</Text>
+            <SegmentedButtons
+              value={autoSave ? 'on' : 'off'}
+              onValueChange={(value) => setAutoSave(value === 'on')}
+              buttons={[
+                { value: 'off', label: 'Off' },
+                { value: 'on', label: 'On' },
+              ]}
+            />
+            <Text style={styles.settingsHelper}>
+              When enabled, active trips are saved automatically when the app
+              goes to background.
+            </Text>
+          </View>
+
+          <View style={styles.settingsRow}>
+            <Text style={styles.settingsLabel}>Orientation</Text>
+            <SegmentedButtons
+              value={orientationMode}
+              onValueChange={(value) => {
+                const mode = value as OrientationMode;
+                setOrientationMode(mode);
+                void applyOrientation(mode);
+              }}
+              buttons={[
+                { value: 'portrait', label: 'Portrait' },
+                { value: 'landscape', label: 'Landscape' },
+                { value: 'auto', label: 'Auto (device)' },
+              ]}
+            />
+            <Text style={styles.settingsHelper}>
+              Lock V3locity to a specific orientation or follow device
+              auto-rotate.
+            </Text>
+          </View>
+
           {__DEV__ && (
             <View style={styles.settingsRow}>
-              <Text style={styles.settingsLabel}>Debug overlay</Text>
+              <Text style={styles.settingsLabel}>Debug Overlay</Text>
               <SegmentedButtons
-                style={styles.settingsButtonsRow}
                 value={debugEnabled ? 'on' : 'off'}
                 onValueChange={(value) => setDebugEnabled(value === 'on')}
                 buttons={[
@@ -341,197 +856,393 @@ export default function Speedometer() {
                   { value: 'on', label: 'On' },
                 ]}
               />
-              <Text style={styles.settingsHelper}>
-                Shows raw sensor values for debugging; for development only.
-              </Text>
             </View>
           )}
+
+          <Button
+            mode="text"
+            style={styles.settingsClose}
+            onPress={() => setShowSettings(false)}
+          >
+            Done
+          </Button>
         </Modal>
+
+        <Snackbar
+          visible={toastMessage != null}
+          onDismiss={() => setToastMessage(null)}
+          duration={2500}
+          wrapperStyle={styles.toastWrapper}
+          style={styles.toast}
+        >
+          {toastMessage}
+        </Snackbar>
       </Portal>
-    </SafeAreaView>
+
+      <DebugOverlay state={state} enabled={debugEnabled} />
+      <View style={[styles.footer, { paddingBottom: insets.bottom }]}>
+        <View style={styles.footerLeft}>
+          <Text style={styles.footerLabel}>STATUS</Text>
+          <Text style={styles.footerValue}>
+            {isPermissionError
+              ? 'Permission required'
+              : isSensorUnavailable
+              ? 'Sensors unavailable'
+              : isTripActive
+              ? 'Recording'
+              : status === 'ready'
+              ? 'Ready'
+              : 'Initializing'}
+          </Text>
+        </View>
+        <View style={styles.footerCenter}>
+          <Text style={styles.footerLabel}>SESSION</Text>
+          <Text style={styles.footerValue}>
+            {new Date(elapsedMs).toISOString().substring(11, 19)}
+          </Text>
+        </View>
+        <View style={styles.footerRight}>
+          <Text style={styles.footerLabel}>SIGNAL</Text>
+          <Text style={styles.footerValue}>
+            {quality ?? 'unknown'} • {source ?? 'none'}
+          </Text>
+        </View>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1A1A1A',
+    backgroundColor: colors.background,
   },
-  tabRow: {
+  headerWrapper: {
+    backgroundColor: colors.background,
+  },
+  appbar: {
+    backgroundColor: 'transparent',
+    elevation: 0,
+  },
+  appbarTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    letterSpacing: 1,
+    color: colors.textPrimary,
+  },
+  drawerOverlay: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  drawerBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  drawerPanel: {
+    width: 280,
+    backgroundColor: colors.surface,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderRightColor: colors.border,
+    paddingTop: 16,
+  },
+  drawerTitle: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
     paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 4,
+    paddingBottom: 12,
+  },
+  drawerItem: {
+    backgroundColor: 'transparent',
+  },
+  drawerItemTitle: {
+    color: colors.textPrimary,
+    fontWeight: '600',
+  },
+  scrollContent: {
+    alignItems: 'center',
+    paddingBottom: 32,
   },
   messageContainer: {
-    marginTop: 40,
-    paddingHorizontal: 24,
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 32,
   },
   messageTitle: {
-    color: 'white',
-    fontSize: 20,
+    color: colors.textPrimary,
+    fontSize: 18,
     fontWeight: '700',
     textAlign: 'center',
     marginBottom: 8,
   },
   messageBody: {
-    color: '#CCCCCC',
+    color: colors.textSecondary,
     fontSize: 14,
     textAlign: 'center',
-  },
-  speedometerContainer: {
-    marginTop: 24,
-    alignItems: 'center',
-  },
-  speedometer: {
-    width: 240,
-    height: 240,
-    borderRadius: 120,
-    borderWidth: 12,
-    borderColor: '#333333',
-    backgroundColor: 'black',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  speedometerDegraded: {
-    borderColor: '#665500',
-    backgroundColor: '#111111',
-  },
-  speed: {
-    fontSize: 72,
-    fontWeight: 'bold',
-    color: 'white',
-  },
-  speedDegradedText: {
-    color: '#FFDD66',
-  },
-  unitsLabel: {
-    fontSize: 22,
-    color: '#AAAAAA',
-    marginTop: 6,
-  },
-  buttonContainer: {
-    marginTop: 16,
-    alignItems: 'center',
-  },
-  unitSegment: {
-    width: '80%',
-    marginBottom: 8,
-  },
-  metricsRow: {
-    marginTop: 24,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '90%',
-  },
-  tripButtonsRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  tripPrimaryButton: {
-    minWidth: 120,
-  },
-  tripSecondaryButton: {
-    minWidth: 140,
-  },
-  settingsPanel: {
-    position: 'absolute',
-    right: 12,
-    top: 40,
-    backgroundColor: '#111111',
-    borderRadius: 8,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#333333',
-    maxWidth: 260,
-  },
-  settingsTitle: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  settingsRow: {
-    marginBottom: 8,
-  },
-  settingsLabel: {
-    color: '#CCCCCC',
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  settingsButtonsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  settingsChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#555555',
-  },
-  settingsChipActive: {
-    borderColor: '#007bff',
-    backgroundColor: '#003366',
-  },
-  settingsChipText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-  },
-  mountContainer: {
-    marginTop: 16,
-    alignItems: 'center',
-  },
-  mountLabel: {
-    color: '#AAAAAA',
-    fontSize: 12,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  mountButton: {
-    marginTop: 6,
-    borderWidth: 1,
-    borderColor: '#444444',
-    borderRadius: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-  },
-  mountButtonText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-  },
-  metric: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  infoLabel: {
-    color: '#AAAAAA',
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  infoValue: {
-    color: 'white',
-    fontSize: 22,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  infoUnit: {
-    color: '#AAAAAA',
-    fontSize: 12,
-    marginTop: 2,
-    textAlign: 'center',
+    lineHeight: 20,
   },
   errorText: {
-    color: '#FF4500',
-    backgroundColor: '#111',
-    padding: 10,
-    borderRadius: 5,
-    marginTop: 20,
+    color: colors.danger,
+    fontSize: 16,
+    fontWeight: '600',
     textAlign: 'center',
+  },
+
+  dialContainer: {
+    marginTop: 8,
+    alignItems: 'center',
+  },
+
+  tripSection: {
+    alignItems: 'center',
+    marginTop: 4,
+    minHeight: 56,
+  },
+  tripPausedLabel: {
+    color: colors.textMuted,
+    fontSize: 13,
+    marginBottom: 6,
+  },
+  tripButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 36,
+    borderRadius: 28,
+    minWidth: 180,
+  },
+  tripButtonIdle: {
+    backgroundColor: colors.accent,
+  },
+  tripButtonActive: {
+    backgroundColor: colors.danger,
+  },
+  recordDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#fff',
+    marginRight: 10,
+  },
+  tripButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#000',
+    letterSpacing: 0.5,
+  },
+  tripButtonTextActive: {
+    color: '#fff',
+  },
+  resetButton: {
+    marginTop: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 16,
+  },
+  resetText: {
+    color: colors.textMuted,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 24,
+    paddingHorizontal: 20,
+    width: '100%',
+  },
+
+  // Landscape layout
+  landscapeRoot: {
+    flex: 1,
+    flexDirection: 'row',
+    paddingHorizontal: 12,
+    paddingTop: 8,
+  },
+  landscapeLeft: {
+    flex: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  landscapeRight: {
+    flex: 2,
+    paddingLeft: 12,
+    justifyContent: 'space-between',
+  },
+  landscapeStatsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 12,
+  },
+  landscapeStat: {
+    width: '48%',
+  },
+  landscapeStatLabel: {
+    color: colors.textMuted,
+    fontSize: 11,
+    marginBottom: 2,
+  },
+  landscapeStatValue: {
+    color: colors.textPrimary,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  landscapeCompassBlock: {
+    marginTop: 12,
+  },
+  landscapeMiniCompassRow: {
+    marginTop: 12,
+    alignItems: 'center',
+  },
+  landscapeTripButtonRow: {
+    marginTop: 16,
+    alignItems: 'flex-end',
+  },
+  landscapeTripButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 32,
+    borderRadius: 28,
+  },
+  landscapeTripButtonIdle: {
+    backgroundColor: colors.accent,
+  },
+  landscapeTripButtonActive: {
+    backgroundColor: colors.danger,
+  },
+  landscapeTripButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#000',
+    letterSpacing: 0.5,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: colors.border,
+  },
+  statLabel: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  statValue: {
+    color: colors.textPrimary,
+    fontSize: 26,
+    fontWeight: '700',
+  },
+  statUnit: {
+    color: colors.textSecondary,
+    fontSize: 11,
+    marginTop: 2,
+    letterSpacing: 0.5,
+  },
+
+  compassSection: {
+    marginTop: 28,
+    width: '100%',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  miniCompassRow: {
+    marginTop: 16,
+    alignItems: 'center',
+  },
+
+  settingsSheet: {
+    backgroundColor: colors.surface,
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 24,
+    paddingBottom: 32,
+    paddingTop: 12,
+  },
+  settingsHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.textMuted,
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  settingsTitle: {
+    color: colors.textPrimary,
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '700',
+    marginBottom: 20,
+  },
+  settingsRow: {
+    marginBottom: 20,
+  },
+  settingsLabel: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 8,
+    letterSpacing: 0.3,
+  },
+  settingsHelper: {
+    color: colors.textMuted,
+    fontSize: 12,
+    marginTop: 6,
+  },
+  settingsClose: {
+    marginTop: 8,
+    alignSelf: 'center',
+  },
+  toastWrapper: {
+    bottom: 56,
+  },
+  toast: {
+    backgroundColor: colors.surfaceVariant,
+  },
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  footerLeft: {
+    flex: 1,
+  },
+  footerCenter: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  footerRight: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  footerLabel: {
+    color: colors.textMuted,
+    fontSize: 9,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  footerValue: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    marginTop: 2,
   },
 });

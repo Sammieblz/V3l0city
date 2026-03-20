@@ -23,5 +23,11 @@ export const MAX_FORWARD_ACCELERATION_MPS2 = 6;
 // Speed statistics sampling
 export const MAX_SPEED_SAMPLE_GAP_SECONDS = 2;
 
+// Auto-start: require sustained speed above threshold for this long (seconds)
+export const AUTO_START_MOTION_SUSTAIN_SECONDS = 2.5;
+
+// Auto-pause: require sustained speed below threshold for this long before pausing (seconds)
+export const AUTO_STOP_MOTION_SUSTAIN_SECONDS = 2.5;
+
 // Math helpers
 export const TWO_PI = Math.PI * 2;

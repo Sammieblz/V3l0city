@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity } from 'react-native';
-import { Surface } from 'react-native-paper';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { colors } from '../theme/paperTheme';
 
 import type { VelocitySensorsState } from '../hooks/useVelocitySensors';
 
@@ -22,7 +22,7 @@ const DebugOverlay: React.FC<Props> = ({ state, enabled }) => {
     return (
       <TouchableOpacity style={styles.collapsedContainer} onPress={toggle}>
         <Text style={styles.collapsedText}>
-          {state.status} • {state.quality} • {state.source}
+          {state.status} | {state.quality} | {state.source}
         </Text>
       </TouchableOpacity>
     );
@@ -30,7 +30,7 @@ const DebugOverlay: React.FC<Props> = ({ state, enabled }) => {
 
   return (
     <TouchableOpacity onPress={toggle} activeOpacity={0.9}>
-      <Surface style={styles.container} elevation={2}>
+      <View style={styles.container}>
         <Text style={styles.line}>status: {state.status}</Text>
         <Text style={styles.line}>permission: {state.permission}</Text>
         <Text style={styles.line}>quality: {state.quality}</Text>
@@ -54,7 +54,7 @@ const DebugOverlay: React.FC<Props> = ({ state, enabled }) => {
             : 'null'}
         </Text>
         <Text style={styles.hint}>Tap to collapse</Text>
-      </Surface>
+      </View>
     </TouchableOpacity>
   );
 };
@@ -67,31 +67,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.7)',
   },
   collapsedText: {
-    color: '#DDDDDD',
+    color: colors.textMuted,
     fontSize: 10,
   },
   container: {
     position: 'absolute',
     left: 8,
     bottom: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 6,
     backgroundColor: 'rgba(0,0,0,0.85)',
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   line: {
-    color: '#CCCCCC',
+    color: colors.textSecondary,
     fontSize: 10,
+    lineHeight: 14,
   },
   hint: {
-    color: '#777777',
+    color: colors.textMuted,
     fontSize: 9,
-    marginTop: 2,
+    marginTop: 4,
   },
 });
 
 export default DebugOverlay;
-

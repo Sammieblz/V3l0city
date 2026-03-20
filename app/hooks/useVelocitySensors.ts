@@ -4,6 +4,8 @@ import * as Location from 'expo-location';
 import { DeviceMotion } from 'expo-sensors';
 
 import {
+  AUTO_START_MOTION_SUSTAIN_SECONDS,
+  AUTO_STOP_MOTION_SUSTAIN_SECONDS,
   DEFAULT_KALMAN_OPTIONS,
   LOCATION_DISTANCE_INTERVAL_METERS,
   LOCATION_UPDATE_INTERVAL_MS,
@@ -58,11 +60,15 @@ export type VelocitySensorsState = VelocityStats & {
   motionAvailable: boolean;
   gpsAvailable: boolean;
   headingAvailable: boolean;
+  isMoving: boolean;
+  isStopped: boolean;
 };
 
 type UseVelocitySensorsOptions = {
   mountOffsetDegrees: number;
   kalmanOptions?: typeof DEFAULT_KALMAN_OPTIONS;
+  /** When false (trip paused), only speedMps is updated for display; distance and max/average are not accumulated. */
+  accumulateTrip?: boolean;
 };
 
 const initialStats: VelocityStats = {
@@ -94,6 +100,7 @@ const getSignalQuality = (
 export const useVelocitySensors = ({
   mountOffsetDegrees,
   kalmanOptions = DEFAULT_KALMAN_OPTIONS,
+  accumulateTrip = true,
 }: UseVelocitySensorsOptions) => {
   const [stats, setStats] = useState<VelocityStats>(initialStats);
   const [headingDegrees, setHeadingDegrees] = useState<number | null>(null);
@@ -106,8 +113,14 @@ export const useVelocitySensors = ({
   const [gpsAvailable, setGpsAvailable] = useState<boolean>(false);
   const [motionAvailable, setMotionAvailable] = useState<boolean>(false);
   const [headingAvailable, setHeadingAvailable] = useState<boolean>(false);
+  const [isMoving, setIsMoving] = useState<boolean>(false);
+  const [isStopped, setIsStopped] = useState<boolean>(false);
 
   const [units] = useState<Units>('km/h');
+  const accumulateTripRef = useRef(accumulateTrip);
+  useEffect(() => {
+    accumulateTripRef.current = accumulateTrip;
+  }, [accumulateTrip]);
 
   const mountOffsetRef = useRef<number>(mountOffsetDegrees);
   const lastLocationRef = useRef<Location.LocationObjectCoords | null>(null);
@@ -119,6 +132,9 @@ export const useVelocitySensors = ({
   const headingRef = useRef<number | null>(null);
   const totalSpeedSecondsRef = useRef(0);
   const totalTimeSecondsRef = useRef(0);
+  const firstAboveThresholdAtRef = useRef<number | null>(null);
+  const firstBelowThresholdAtRef = useRef<number | null>(null);
+  const speedMpsRef = useRef(0);
 
   const { filterSpeed, predictSpeed, resetFilter } =
     useKalmanSpeedFilter(kalmanOptions);
@@ -127,12 +143,22 @@ export const useVelocitySensors = ({
     mountOffsetRef.current = mountOffsetDegrees;
   }, [mountOffsetDegrees]);
 
-  const updateSpeedStats = (nextSpeedMps: number, timestampMs: number) => {
+  const updateSpeedStats = (
+    nextSpeedMps: number,
+    timestampMs: number,
+    options?: { accumulate?: boolean }
+  ) => {
+    const accumulate = options?.accumulate !== false;
+
     const lastSample = lastSpeedSampleTimestampRef.current;
     lastSpeedSampleTimestampRef.current = timestampMs;
 
     setStats((prev) => {
-      const nextMax = Math.max(prev.maxSpeedMps, nextSpeedMps);
+      const nextMax = accumulate ? Math.max(prev.maxSpeedMps, nextSpeedMps) : prev.maxSpeedMps;
+
+      if (!accumulate) {
+        return { ...prev, speedMps: nextSpeedMps };
+      }
 
       if (lastSample == null) {
         return {
@@ -178,6 +204,9 @@ export const useVelocitySensors = ({
     headingRef.current = null;
     totalSpeedSecondsRef.current = 0;
     totalTimeSecondsRef.current = 0;
+    firstAboveThresholdAtRef.current = null;
+    firstBelowThresholdAtRef.current = null;
+    speedMpsRef.current = 0;
     setStats(initialStats);
     setHeadingDegrees(null);
     setStatus('initializing');
@@ -186,6 +215,8 @@ export const useVelocitySensors = ({
     setGpsAvailable(false);
     setMotionAvailable(false);
     setHeadingAvailable(false);
+    setIsMoving(false);
+    setIsStopped(false);
     resetFilter();
   };
 
@@ -245,12 +276,19 @@ export const useVelocitySensors = ({
                   timeDiff
                 );
 
-                updateSpeedStats(filteredSpeedMps, timestamp);
+                const accumulate = accumulateTripRef.current;
+                updateSpeedStats(filteredSpeedMps, timestamp, {
+                  accumulate,
+                });
 
                 const accuracyOk =
                   coords.accuracy == null ||
                   coords.accuracy <= MAX_GPS_ACCURACY_METERS;
-                if (accuracyOk && gpsSpeedMps >= MIN_MOVING_SPEED_MPS) {
+                if (
+                  accumulate &&
+                  accuracyOk &&
+                  gpsSpeedMps >= MIN_MOVING_SPEED_MPS
+                ) {
                   setStats((prev) => ({
                     ...prev,
                     distanceMeters: prev.distanceMeters + distanceDelta,
@@ -324,15 +362,23 @@ export const useVelocitySensors = ({
               );
               const deltaSpeed = clampedAcceleration * timeDiff;
               const predictedSpeed = predictSpeed(deltaSpeed);
-              updateSpeedStats(predictedSpeed, now);
+              updateSpeedStats(predictedSpeed, now, {
+                accumulate: accumulateTripRef.current,
+              });
               setSource((prev) =>
                 prev === 'gps' ? 'blended' : 'motion-only'
               );
             });
             setMotionAvailable(true);
           }
-        } catch {
+        }
+        } catch (error) {
           // Motion is optional; do not fail the whole sensor pipeline.
+          logSensorWarning(
+            `DeviceMotion error: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
         }
 
         try {
@@ -350,7 +396,7 @@ export const useVelocitySensors = ({
               setHeadingAvailable(true);
             }
           );
-        } catch {
+        } catch (error) {
           headingRef.current = null;
           setHeadingDegrees(null);
           setHeadingAvailable(false);
@@ -375,6 +421,47 @@ export const useVelocitySensors = ({
       motionSubscription?.remove();
     };
   }, [kalmanOptions]);
+
+  useEffect(() => {
+    speedMpsRef.current = stats.speedMps;
+  }, [stats.speedMps]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const speedMps = speedMpsRef.current;
+      const now = Date.now();
+
+      if (speedMps >= MIN_MOVING_SPEED_MPS) {
+        const firstAt = firstAboveThresholdAtRef.current;
+        if (firstAt === null) {
+          firstAboveThresholdAtRef.current = now;
+        } else {
+          const sustainedSeconds = (now - firstAt) / 1000;
+          if (sustainedSeconds >= AUTO_START_MOTION_SUSTAIN_SECONDS) {
+            setIsMoving(true);
+          }
+        }
+        firstBelowThresholdAtRef.current = null;
+        setIsStopped(false);
+      } else {
+        firstAboveThresholdAtRef.current = null;
+        setIsMoving(false);
+        const firstBelow = firstBelowThresholdAtRef.current;
+        if (firstBelow === null) {
+          firstBelowThresholdAtRef.current = now;
+        } else {
+          const sustainedSeconds = (now - firstBelow) / 1000;
+          if (sustainedSeconds >= AUTO_STOP_MOTION_SUSTAIN_SECONDS) {
+            setIsStopped(true);
+          }
+        }
+      }
+    }, 500);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -406,6 +493,8 @@ export const useVelocitySensors = ({
       motionAvailable,
       gpsAvailable,
       headingAvailable,
+      isMoving,
+      isStopped,
     }),
     [
       stats,
@@ -419,6 +508,8 @@ export const useVelocitySensors = ({
       motionAvailable,
       gpsAvailable,
       headingAvailable,
+      isMoving,
+      isStopped,
     ]
   );
 
