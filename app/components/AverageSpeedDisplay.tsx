@@ -1,5 +1,6 @@
-﻿import React from 'react';
+import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { colors } from '../theme/paperTheme';
 
 interface AverageSpeedDisplayProps {
   averageSpeed: number;
@@ -11,29 +12,33 @@ const AverageSpeedDisplay: React.FC<AverageSpeedDisplayProps> = ({
   unitLabel,
 }) => (
   <View>
-    <Text style={styles.infoLabel}>average</Text>
-    <Text style={styles.infoValue}>{averageSpeed.toFixed(1)}</Text>
-    {unitLabel ? <Text style={styles.infoUnit}>{unitLabel}</Text> : null}
+    <Text style={styles.label}>AVG</Text>
+    <Text style={styles.value}>{Math.round(averageSpeed)}</Text>
+    {unitLabel ? <Text style={styles.unit}>{unitLabel}</Text> : null}
   </View>
 );
 
 const styles = StyleSheet.create({
-  infoLabel: {
-    color: '#ccc',
-    fontSize: 14,
+  label: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  value: {
+    color: colors.textPrimary,
+    fontSize: 26,
+    fontWeight: '700',
     textAlign: 'center',
   },
-  infoValue: {
-    color: 'white',
-    fontSize: 22,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  infoUnit: {
-    color: '#AAAAAA',
-    fontSize: 12,
+  unit: {
+    color: colors.textSecondary,
+    fontSize: 11,
     marginTop: 2,
     textAlign: 'center',
+    letterSpacing: 0.5,
   },
 });
 
