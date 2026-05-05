@@ -6,7 +6,8 @@ let permissionsRequested = false;
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: false,
     shouldSetBadge: false,
   }),
@@ -60,4 +61,3 @@ export const scheduleTripSavedNotification = async (trip: Trip) => {
     trigger: null,
   });
 };
-

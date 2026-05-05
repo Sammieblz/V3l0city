@@ -1,0 +1,526 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`TripHistory renders empty state and a list of trips 1`] = `
+<View
+  style={
+    {
+      "flex": 1,
+      "paddingHorizontal": 16,
+      "paddingTop": 16,
+    }
+  }
+>
+  <View
+    style={
+      {
+        "alignItems": "center",
+        "flexDirection": "row",
+        "justifyContent": "space-between",
+        "marginBottom": 12,
+      }
+    }
+  >
+    <Text
+      style={
+        {
+          "color": "#EAEDF2",
+          "fontSize": 18,
+          "fontWeight": "700",
+          "letterSpacing": 0.3,
+        }
+      }
+    >
+      Trip History
+    </Text>
+  </View>
+  <View
+    style={
+      {
+        "alignItems": "center",
+        "flex": 1,
+        "justifyContent": "center",
+        "paddingBottom": 80,
+      }
+    }
+  >
+    <Text
+      style={
+        {
+          "color": "#8A8F98",
+          "fontSize": 16,
+          "fontWeight": "500",
+        }
+      }
+    >
+      No trips recorded yet.
+    </Text>
+    <Text
+      style={
+        {
+          "color": "#585E68",
+          "fontSize": 13,
+          "marginTop": 8,
+          "paddingHorizontal": 40,
+          "textAlign": "center",
+        }
+      }
+    >
+      Start a trip from the dashboard to track your speed and distance.
+    </Text>
+  </View>
+</View>
+`;
+
+exports[`TripHistory renders empty state and a list of trips 2`] = `
+<View
+  style={
+    {
+      "flex": 1,
+      "paddingHorizontal": 16,
+      "paddingTop": 16,
+    }
+  }
+>
+  <View
+    style={
+      {
+        "alignItems": "center",
+        "flexDirection": "row",
+        "justifyContent": "space-between",
+        "marginBottom": 12,
+      }
+    }
+  >
+    <Text
+      style={
+        {
+          "color": "#EAEDF2",
+          "fontSize": 18,
+          "fontWeight": "700",
+          "letterSpacing": 0.3,
+        }
+      }
+    >
+      Trip History
+    </Text>
+    <View
+      collapsable={false}
+      style={
+        {
+          "backgroundColor": "transparent",
+          "borderRadius": 20,
+          "shadowColor": "#000",
+          "shadowOffset": {
+            "height": 0,
+            "width": 0,
+          },
+          "shadowOpacity": 0,
+          "shadowRadius": 0,
+        }
+      }
+      testID="button-container-outer-layer"
+    >
+      <View
+        collapsable={false}
+        style={
+          {
+            "backgroundColor": "transparent",
+            "borderColor": "transparent",
+            "borderRadius": 20,
+            "borderStyle": "solid",
+            "borderWidth": 0,
+            "flex": undefined,
+            "minWidth": "auto",
+            "shadowColor": "#000",
+            "shadowOffset": {
+              "height": 0,
+              "width": 0,
+            },
+            "shadowOpacity": 0,
+            "shadowRadius": 0,
+          }
+        }
+        testID="button-container"
+      >
+        <View
+          accessibilityRole="button"
+          accessibilityState={
+            {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            [
+              {
+                "overflow": "hidden",
+              },
+              {
+                "borderRadius": 20,
+              },
+            ]
+          }
+          testID="button"
+        >
+          <View
+            style={
+              [
+                {
+                  "alignItems": "center",
+                  "flexDirection": "row",
+                  "justifyContent": "center",
+                },
+                undefined,
+              ]
+            }
+          >
+            <Text
+              numberOfLines={1}
+              selectable={false}
+              style={
+                [
+                  {
+                    "textAlign": "left",
+                  },
+                  {
+                    "color": "rgba(28, 27, 31, 1)",
+                    "writingDirection": "ltr",
+                  },
+                  [
+                    {
+                      "fontFamily": "System",
+                      "fontSize": 14,
+                      "fontWeight": "500",
+                      "letterSpacing": 0.1,
+                      "lineHeight": 20,
+                    },
+                    [
+                      {
+                        "marginHorizontal": 16,
+                        "marginVertical": 9,
+                        "textAlign": "center",
+                      },
+                      false,
+                      {
+                        "marginHorizontal": 12,
+                      },
+                      {
+                        "marginHorizontal": 8,
+                      },
+                      false,
+                      {
+                        "color": "#FF4C6B",
+                        "fontFamily": "System",
+                        "fontSize": 14,
+                        "fontWeight": "500",
+                        "letterSpacing": 0.1,
+                        "lineHeight": 20,
+                      },
+                      undefined,
+                    ],
+                  ],
+                ]
+              }
+              testID="button-text"
+            >
+              Clear All
+            </Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  </View>
+  <RCTScrollView
+    contentContainerStyle={
+      {
+        "paddingBottom": 24,
+      }
+    }
+    data={
+      [
+        {
+          "averageSpeedMps": 5,
+          "endedAt": "1970-01-01T00:00:01.000Z",
+          "id": "1",
+          "maxSpeedMps": 10,
+          "mountLabel": "top",
+          "startedAt": "1970-01-01T00:00:00.000Z",
+          "totalDistanceMeters": 1000,
+          "units": "km/h",
+        },
+      ]
+    }
+    getItem={[Function]}
+    getItemCount={[Function]}
+    keyExtractor={[Function]}
+    onContentSizeChange={[Function]}
+    onLayout={[Function]}
+    onMomentumScrollBegin={[Function]}
+    onMomentumScrollEnd={[Function]}
+    onScroll={[Function]}
+    onScrollBeginDrag={[Function]}
+    onScrollEndDrag={[Function]}
+    removeClippedSubviews={false}
+    renderItem={[Function]}
+    scrollEventThrottle={0.0001}
+    stickyHeaderIndices={[]}
+    viewabilityConfigCallbackPairs={[]}
+  >
+    <View>
+      <View
+        onFocusCapture={[Function]}
+        onLayout={[Function]}
+        style={null}
+      >
+        <View
+          collapsable={false}
+          style={
+            {
+              "backgroundColor": "#22262E",
+              "borderRadius": 12,
+              "marginBottom": 10,
+              "shadowColor": "#000",
+              "shadowOffset": {
+                "height": 0,
+                "width": 0,
+              },
+              "shadowOpacity": 0,
+              "shadowRadius": 0,
+            }
+          }
+          testID="card-container-outer-layer"
+        >
+          <View
+            collapsable={false}
+            style={
+              {
+                "backgroundColor": "#22262E",
+                "borderRadius": 12,
+                "flex": undefined,
+                "shadowColor": "#000",
+                "shadowOffset": {
+                  "height": 0,
+                  "width": 0,
+                },
+                "shadowOpacity": 0,
+                "shadowRadius": 0,
+              }
+            }
+            testID="card-container"
+          >
+            <View
+              style={
+                [
+                  {
+                    "flexShrink": 1,
+                  },
+                  undefined,
+                ]
+              }
+              testID="card"
+            >
+              <View
+                borderRadiusStyles={
+                  {
+                    "borderRadius": 12,
+                  }
+                }
+                style={
+                  [
+                    {
+                      "paddingHorizontal": 16,
+                    },
+                    {
+                      "paddingVertical": 16,
+                    },
+                    undefined,
+                  ]
+                }
+              >
+                <View
+                  style={
+                    {
+                      "alignItems": "center",
+                      "flexDirection": "row",
+                      "justifyContent": "space-between",
+                      "marginBottom": 10,
+                    }
+                  }
+                >
+                  <Text
+                    style={
+                      {
+                        "color": "#EAEDF2",
+                        "fontSize": 14,
+                        "fontWeight": "600",
+                      }
+                    }
+                  >
+                    Dec 31, 1969
+                  </Text>
+                  <Text
+                    style={
+                      {
+                        "color": "#585E68",
+                        "fontSize": 12,
+                      }
+                    }
+                  >
+                    &lt; 1 min
+                  </Text>
+                </View>
+                <View
+                  style={
+                    {
+                      "flexDirection": "row",
+                      "justifyContent": "space-around",
+                      "marginBottom": 8,
+                    }
+                  }
+                >
+                  <View
+                    style={
+                      {
+                        "alignItems": "center",
+                      }
+                    }
+                  >
+                    <Text
+                      style={
+                        {
+                          "color": "#EAEDF2",
+                          "fontSize": 20,
+                          "fontWeight": "700",
+                        }
+                      }
+                    >
+                      1.0
+                    </Text>
+                    <Text
+                      style={
+                        {
+                          "color": "#585E68",
+                          "fontSize": 10,
+                          "letterSpacing": 0.5,
+                          "marginTop": 2,
+                          "textTransform": "uppercase",
+                        }
+                      }
+                    >
+                      km
+                    </Text>
+                  </View>
+                  <View
+                    style={
+                      {
+                        "alignItems": "center",
+                      }
+                    }
+                  >
+                    <Text
+                      style={
+                        {
+                          "color": "#EAEDF2",
+                          "fontSize": 20,
+                          "fontWeight": "700",
+                        }
+                      }
+                    >
+                      18
+                    </Text>
+                    <Text
+                      style={
+                        {
+                          "color": "#585E68",
+                          "fontSize": 10,
+                          "letterSpacing": 0.5,
+                          "marginTop": 2,
+                          "textTransform": "uppercase",
+                        }
+                      }
+                    >
+                      avg 
+                      km/h
+                    </Text>
+                  </View>
+                  <View
+                    style={
+                      {
+                        "alignItems": "center",
+                      }
+                    }
+                  >
+                    <Text
+                      style={
+                        {
+                          "color": "#EAEDF2",
+                          "fontSize": 20,
+                          "fontWeight": "700",
+                        }
+                      }
+                    >
+                      36
+                    </Text>
+                    <Text
+                      style={
+                        {
+                          "color": "#585E68",
+                          "fontSize": 10,
+                          "letterSpacing": 0.5,
+                          "marginTop": 2,
+                          "textTransform": "uppercase",
+                        }
+                      }
+                    >
+                      max 
+                      km/h
+                    </Text>
+                  </View>
+                </View>
+                <Text
+                  style={
+                    {
+                      "color": "#585E68",
+                      "fontSize": 11,
+                      "textAlign": "center",
+                    }
+                  }
+                >
+                  07:00 PM
+                   
+                  -
+                   
+                  07:00 PM
+                </Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      </View>
+    </View>
+  </RCTScrollView>
+</View>
+`;

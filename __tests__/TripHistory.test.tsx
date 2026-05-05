@@ -1,12 +1,18 @@
 import React from 'react';
-import { create } from 'react-test-renderer';
+import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
 import TripHistory from '../app/components/TripHistory';
 import type { Trip } from '../app/domain/trip';
 
 describe('TripHistory', () => {
-  it('renders empty state and a list of trips', () => {
-    const empty = create(<TripHistory trips={[]} onClear={jest.fn()} />);
+  it('renders empty state and a list of trips', async () => {
+    let empty: ReactTestRenderer | undefined;
+    await act(async () => {
+      empty = create(<TripHistory trips={[]} onClear={jest.fn()} />);
+    });
+    if (!empty) {
+      throw new Error('Empty TripHistory renderer was not created');
+    }
     expect(empty.toJSON()).toMatchSnapshot();
 
     const trips: Trip[] = [
@@ -22,10 +28,13 @@ describe('TripHistory', () => {
       },
     ];
 
-    const withTrips = create(
-      <TripHistory trips={trips} onClear={jest.fn()} />
-    );
+    let withTrips: ReactTestRenderer | undefined;
+    await act(async () => {
+      withTrips = create(<TripHistory trips={trips} onClear={jest.fn()} />);
+    });
+    if (!withTrips) {
+      throw new Error('TripHistory renderer was not created');
+    }
     expect(withTrips.toJSON()).toMatchSnapshot();
   });
 });
-

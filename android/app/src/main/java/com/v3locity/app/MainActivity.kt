@@ -1,4 +1,4 @@
-package com.byteflow.myspeedometer
+package com.v3locity.app
 
 import android.graphics.Color
 import android.os.Build
