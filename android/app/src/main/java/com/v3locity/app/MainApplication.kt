@@ -1,4 +1,4 @@
-package com.byteflow.myspeedometer
+package com.v3locity.app
 
 import android.app.Application
 import android.content.res.Configuration

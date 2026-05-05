@@ -4,7 +4,7 @@
     "jsx": "react-native", 
     "strict": true,
     "allowSyntheticDefaultImports": true, // Allow importing default exports
-    "moduleResolution": "node",          
+    "moduleResolution": "bundler",
     "esModuleInterop": true,              
     "skipLibCheck": true,
     "paths": {

@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "my-speedometer-expo",
-    "slug": "my-speedometer-expo",
+    "name": "V3locity",
+    "slug": "v3locity",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "scheme": "v3locity",
     "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/images/splash.png",
@@ -14,7 +14,12 @@
     },
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.v3locity.app",
+      "buildNumber": "1",
       "infoPlist": {
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "V3locity uses your location to calculate speed, distance, heading, and trip history for active trips.",
+        "NSLocationAlwaysUsageDescription": "V3locity uses your location to calculate speed, distance, heading, and trip history for active trips.",
+        "NSLocationWhenInUseUsageDescription": "V3locity uses your location to calculate speed, distance, heading, and trip history while the app is open.",
         "NSMotionUsageDescription": "This app uses motion sensors to improve speed accuracy."
       }
     },
@@ -34,7 +39,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.byteflow.myspeedometer"
+      "package": "com.v3locity.app"
     },
     "web": {
       "bundler": "metro",

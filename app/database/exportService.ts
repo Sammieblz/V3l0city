@@ -1,4 +1,4 @@
-import * as FileSystem from 'expo-file-system';
+import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
 import { getTrips } from './tripRepository';
@@ -17,13 +17,12 @@ export const exportAsJson = async (): Promise<void> => {
 
   const payload = { preferences, trips };
   const json = JSON.stringify(payload, null, 2);
-  const path = `${FileSystem.documentDirectory}v3locity_export_${timestamp()}.json`;
+  const file = new File(Paths.document, `v3locity_export_${timestamp()}.json`);
 
-  await FileSystem.writeAsStringAsync(path, json, {
-    encoding: FileSystem.EncodingType.UTF8,
-  });
+  file.create({ overwrite: true });
+  file.write(json, { encoding: 'utf8' });
 
-  await Sharing.shareAsync(path, {
+  await Sharing.shareAsync(file.uri, {
     mimeType: 'application/json',
     dialogTitle: 'Export V3locity Data',
     UTI: 'public.json',
@@ -71,13 +70,12 @@ export const exportAsCsv = async (): Promise<void> => {
   });
 
   const csv = [headers.join(','), ...rows].join('\n');
-  const path = `${FileSystem.documentDirectory}v3locity_trips_${timestamp()}.csv`;
+  const file = new File(Paths.document, `v3locity_trips_${timestamp()}.csv`);
 
-  await FileSystem.writeAsStringAsync(path, csv, {
-    encoding: FileSystem.EncodingType.UTF8,
-  });
+  file.create({ overwrite: true });
+  file.write(csv, { encoding: 'utf8' });
 
-  await Sharing.shareAsync(path, {
+  await Sharing.shareAsync(file.uri, {
     mimeType: 'text/csv',
     dialogTitle: 'Export V3locity Trips',
     UTI: 'public.comma-separated-values-text',

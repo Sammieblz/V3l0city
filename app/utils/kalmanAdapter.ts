@@ -9,20 +9,26 @@ type KalmanInternal = {
   R: number;
 };
 
+type KalmanResult = number | { x: number };
+
+const toNonNegativeNumber = (result: KalmanResult): number => {
+  const value = typeof result === 'number' ? result : result.x;
+  return Number.isFinite(value) ? Math.max(0, value) : 0;
+};
+
 export const createKalmanFilter = (options: KalmanOptions): KalmanFilter => {
-  return new KalmanFilter(options);
+  return new KalmanFilter({ B: 1, ...options });
 };
 
 export const filterValue = (filter: KalmanFilter, value: number): number => {
-  // kalmanjs exposes the current state on .x; clamp to non‑negative
-  return Math.max(0, filter.filter(value).x);
+  return toNonNegativeNumber(filter.filter(value) as unknown as KalmanResult);
 };
 
 export const predictValue = (
   filter: KalmanFilter,
   delta: number
 ): number => {
-  return Math.max(0, filter.predict(delta).x);
+  return toNonNegativeNumber(filter.predict(delta) as unknown as KalmanResult);
 };
 
 export const resetKalmanFilter = (
@@ -32,7 +38,7 @@ export const resetKalmanFilter = (
   // Replace the underlying instance with a fresh one configured
   // with the original options.
   void current; // explicit that current is intentionally unused
-  return new KalmanFilter(options);
+  return createKalmanFilter(options);
 };
 
 export const setMeasurementNoise = (
@@ -44,4 +50,3 @@ export const setMeasurementNoise = (
   const clamped = Math.min(maxR, Math.max(minR, variance));
   (filter as unknown as KalmanInternal).R = clamped;
 };
-
