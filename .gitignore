@@ -54,3 +54,26 @@ yarn-error.*
 
 expo-env.d.ts
 # @end expo-cli
+
+# Project-local secrets and generated artifacts
+.env
+.env.*
+!.env.example
+*.keystore
+*.apk
+*.aab
+android/app/release/
+*.xcresult
+*.xcarchive
+.vscode/
+
+# Local Expo module build output
+modules/*/android/.cxx/
+modules/*/android/.gradle/
+modules/*/android/.externalNativeBuild/
+modules/*/android/build/
+modules/*/ios/build/
+modules/*/common/cpp/tests/.build/
+
+# Local telemetry server data
+server/data/
