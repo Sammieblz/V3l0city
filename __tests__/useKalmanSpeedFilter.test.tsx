@@ -1,8 +1,8 @@
 import React from 'react';
 import { act, create } from 'react-test-renderer';
 
-import { useKalmanSpeedFilter } from '../app/hooks/useKalmanSpeedFilter';
-import { DEFAULT_KALMAN_OPTIONS } from '../app/utils/constants';
+import { useKalmanSpeedFilter } from '../src/hooks/useKalmanSpeedFilter';
+import { DEFAULT_KALMAN_OPTIONS } from '../src/utils/constants';
 
 type Props = {
   callback: (api: {

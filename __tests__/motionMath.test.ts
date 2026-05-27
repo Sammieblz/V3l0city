@@ -2,7 +2,7 @@ import { DeviceMotionOrientation } from 'expo-sensors';
 import {
   getForwardAcceleration,
   normalizeHeadingDegrees,
-} from '../app/utils/motionMath';
+} from '../src/utils/motionMath';
 
 describe('motionMath', () => {
   it('normalizes heading degrees into [0, 360)', () => {

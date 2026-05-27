@@ -4,7 +4,7 @@ import {
   predictValue,
   resetKalmanFilter,
   setMeasurementNoise,
-} from '../app/utils/kalmanAdapter';
+} from '../src/utils/kalmanAdapter';
 
 describe('kalmanAdapter', () => {
   it('filters and predicts non-negative values', () => {

@@ -5,7 +5,7 @@ import {
   toDisplayDistance,
   toDisplaySpeed,
   updateKalmanNoise,
-} from '../app/utils/speedMath';
+} from '../src/utils/speedMath';
 
 describe('speedMath', () => {
   it('converts speed to km/h and mph', () => {

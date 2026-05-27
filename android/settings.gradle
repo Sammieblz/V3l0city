@@ -22,7 +22,7 @@ extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
   }
 }
 
-rootProject.name = 'V3locity'
+rootProject.name = 'V3l0city'
 
 dependencyResolutionManagement {
   versionCatalogs {

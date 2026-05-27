@@ -1,0 +1,19 @@
+{
+  "name": "v3l0city-speed-engine",
+  "version": "0.1.0",
+  "description": "Native foreground speed engine for V3l0city.",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "sideEffects": false,
+  "private": true,
+  "keywords": [
+    "expo",
+    "react-native",
+    "speedometer"
+  ],
+  "peerDependencies": {
+    "expo": "*",
+    "expo-modules-core": "*",
+    "react-native": "*"
+  }
+}

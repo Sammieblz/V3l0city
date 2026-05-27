@@ -1,24 +1,38 @@
 {
-  "name": "v3locity",
+  "name": "v3l0city",
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
     "start": "expo start --dev-client",
-    "android": "expo run:android",
-    "ios": "expo run:ios",
+    "android": "sh scripts/run-android.sh",
+    "android:diagnose-speed": "sh scripts/diagnose-android-speed.sh",
+    "android:simulate-drive": "sh scripts/simulate-android-drive.sh",
+    "ios": "sh scripts/run-ios.sh",
+    "ios:simulate-drive": "sh scripts/simulate-ios-drive.sh",
     "web": "expo start --web",
     "test": "jest --watchAll",
+    "test:speed-engine:cpp": "sh modules/v3l0city-speed-engine/common/cpp/tests/run_speed_engine_tests.sh",
+    "server:dev": "tsx watch server/src/index.ts",
+    "server:start": "tsx server/src/index.ts",
+    "server:test": "tsx --test \"server/src/**/*.test.ts\"",
     "lint": "expo lint"
   },
   "jest": {
-    "preset": "jest-expo"
+    "preset": "jest-expo",
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/server/"
+    ]
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
+    "@fastify/websocket": "^11.2.0",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-navigation/native": "^7.1.8",
+    "better-sqlite3": "^12.10.0",
     "expo": "^54.0.33",
     "expo-constants": "~18.0.13",
+    "expo-crypto": "~15.0.9",
     "expo-file-system": "~19.0.21",
     "expo-font": "~14.0.11",
     "expo-linking": "~8.0.11",
@@ -33,29 +47,39 @@
     "expo-status-bar": "~3.0.9",
     "expo-system-ui": "~6.0.9",
     "expo-web-browser": "~15.0.10",
+    "fastify": "^5.8.5",
     "kalmanjs": "^1.1.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
     "react-native-gesture-handler": "~2.28.0",
+    "react-native-gifted-charts": "^1.4.77",
+    "react-native-linear-gradient": "^2.8.3",
     "react-native-paper": "^5.12.3",
     "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
     "react-native-svg": "15.12.1",
     "react-native-web": "^0.21.0",
-    "react-native-worklets": "0.5.1"
+    "react-native-worklets": "0.5.1",
+    "v3l0city-speed-engine": "file:modules/v3l0city-speed-engine",
+    "ws": "^8.20.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/jest": "^29.5.12",
+    "@types/node": "^25.9.0",
     "@types/react": "~19.1.10",
     "@types/react-test-renderer": "^19.1.0",
+    "@types/ws": "^8.18.1",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~10.0.0",
     "jest": "^29.2.1",
     "jest-expo": "~54.0.17",
     "react-test-renderer": "19.1.0",
+    "tsx": "^4.22.2",
     "typescript": "~5.9.2"
   },
   "private": true

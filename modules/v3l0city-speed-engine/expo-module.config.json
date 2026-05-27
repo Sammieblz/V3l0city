@@ -1,0 +1,10 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["V3l0citySpeedEngineModule"],
+    "podspecPath": "V3l0citySpeedEngine.podspec"
+  },
+  "android": {
+    "modules": ["com.v3l0city.speedengine.V3l0citySpeedEngineModule"]
+  }
+}
