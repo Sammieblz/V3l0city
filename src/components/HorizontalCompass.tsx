@@ -7,7 +7,7 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import { colors, motion, spacing } from '../theme/paperTheme';
+import { colors, fontFamilies, motion, spacing } from '../theme/paperTheme';
 import {
   isUsableHeading,
   normalizeHeading,
@@ -125,6 +125,7 @@ const HorizontalCompass: React.FC<HorizontalCompassProps> = ({
             x={x}
             y={STRIP_HEIGHT - tickH - 7}
             fill={deg === 0 ? colors.north : colors.textSecondary}
+            fontFamily={fontFamilies.display}
             fontSize={deg % 90 === 0 ? 13 : 10}
             fontWeight={deg % 90 === 0 ? '700' : '500'}
             textAnchor="middle"
@@ -139,6 +140,7 @@ const HorizontalCompass: React.FC<HorizontalCompassProps> = ({
             x={x}
             y={STRIP_HEIGHT - tickH - 6}
             fill={colors.textMuted}
+            fontFamily={fontFamilies.numeric}
             fontSize={9}
             textAnchor="middle"
           >
@@ -221,12 +223,14 @@ const styles = StyleSheet.create({
   },
   headingText: {
     fontSize: 14,
+    fontFamily: fontFamilies.numeric,
     fontWeight: '600',
     color: colors.textSecondary,
     letterSpacing: 0,
   },
   headingMeta: {
     color: colors.textMuted,
+    fontFamily: fontFamilies.bodyBold,
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0,

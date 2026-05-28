@@ -9,3 +9,9 @@ export const logSensorDebug = (message: string): void => {
     console.debug(`[V3l0city][sensor] ${message}`);
   }
 };
+
+export const logAppWarning = (scope: string, error: unknown): void => {
+  if (__DEV__) {
+    console.warn(`[V3l0city][${scope}]`, error);
+  }
+};

@@ -37,7 +37,13 @@ const createTables = (database: SQLite.SQLiteDatabase): void => {
       max_speed_mps REAL NOT NULL DEFAULT 0,
       average_speed_mps REAL NOT NULL DEFAULT 0,
       units TEXT NOT NULL DEFAULT 'km/h',
-      mount_label TEXT
+      mount_label TEXT,
+      record_status TEXT NOT NULL DEFAULT 'completed',
+      local_updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      deleted_at TEXT,
+      cloud_synced_at TEXT,
+      cloud_sync_error TEXT,
+      sync_status TEXT NOT NULL DEFAULT 'local'
     );
 
     CREATE TABLE IF NOT EXISTS trip_speed_samples (
@@ -72,6 +78,24 @@ const createTables = (database: SQLite.SQLiteDatabase): void => {
       ON trip_speed_samples (trip_id, elapsed_ms);
     CREATE INDEX IF NOT EXISTS idx_trip_speed_samples_upload
       ON trip_speed_samples (uploaded_at, trip_id, sequence);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_trip_speed_samples_unique_sequence
+      ON trip_speed_samples (trip_id, sequence);
+
+    CREATE TABLE IF NOT EXISTS sync_outbox (
+      id TEXT PRIMARY KEY,
+      operation_type TEXT NOT NULL,
+      entity_type TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      payload_json TEXT NOT NULL DEFAULT '{}',
+      status TEXT NOT NULL DEFAULT 'pending',
+      attempt_count INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_sync_outbox_status
+      ON sync_outbox (status, created_at);
   `);
 };
 
@@ -98,6 +122,37 @@ const addColumnIfMissing = (
 };
 
 const runMigrations = (database: SQLite.SQLiteDatabase): void => {
+  addColumnIfMissing(
+    database,
+    'trips',
+    'record_status',
+    "record_status TEXT NOT NULL DEFAULT 'completed'"
+  );
+  addColumnIfMissing(
+    database,
+    'trips',
+    'local_updated_at',
+    'local_updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP'
+  );
+  addColumnIfMissing(database, 'trips', 'deleted_at', 'deleted_at TEXT');
+  addColumnIfMissing(
+    database,
+    'trips',
+    'cloud_synced_at',
+    'cloud_synced_at TEXT'
+  );
+  addColumnIfMissing(
+    database,
+    'trips',
+    'cloud_sync_error',
+    'cloud_sync_error TEXT'
+  );
+  addColumnIfMissing(
+    database,
+    'trips',
+    'sync_status',
+    "sync_status TEXT NOT NULL DEFAULT 'local'"
+  );
   addColumnIfMissing(
     database,
     'trip_speed_samples',
@@ -178,6 +233,11 @@ const runMigrations = (database: SQLite.SQLiteDatabase): void => {
   database.runSync(
     'INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES (?, ?)',
     '2026-05-26-trip-heading-diagnostics',
+    new Date().toISOString()
+  );
+  database.runSync(
+    'INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES (?, ?)',
+    '2026-05-27-offline-cloud-sync',
     new Date().toISOString()
   );
 };

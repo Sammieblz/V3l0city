@@ -21,6 +21,9 @@ web-build/
 # dependencies
 node_modules/
 
+# code editors
+.vscode/
+
 # Expo
 .expo/
 dist/

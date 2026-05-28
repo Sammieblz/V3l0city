@@ -1,7 +1,7 @@
 import React from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { Button, Card } from 'react-native-paper';
-import { colors } from '../theme/paperTheme';
+import { colors, fontFamilies } from '../theme/paperTheme';
 import type { Trip } from '../domain/trip';
 
 type Props = {
@@ -124,6 +124,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.textPrimary,
+    fontFamily: fontFamilies.display,
     fontSize: 18,
     fontWeight: '700',
     letterSpacing: 0.3,
@@ -136,11 +137,13 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     color: colors.textSecondary,
+    fontFamily: fontFamilies.bodyMedium,
     fontSize: 16,
     fontWeight: '500',
   },
   emptyHint: {
     color: colors.textMuted,
+    fontFamily: fontFamilies.body,
     fontSize: 13,
     marginTop: 8,
     textAlign: 'center',
@@ -162,11 +165,13 @@ const styles = StyleSheet.create({
   },
   tripDate: {
     color: colors.textPrimary,
+    fontFamily: fontFamilies.bodySemiBold,
     fontSize: 14,
     fontWeight: '600',
   },
   tripDuration: {
     color: colors.textMuted,
+    fontFamily: fontFamilies.body,
     fontSize: 12,
   },
   tripStats: {
@@ -179,11 +184,13 @@ const styles = StyleSheet.create({
   },
   statValue: {
     color: colors.textPrimary,
+    fontFamily: fontFamilies.numeric,
     fontSize: 20,
     fontWeight: '700',
   },
   statLabel: {
     color: colors.textMuted,
+    fontFamily: fontFamilies.bodyMedium,
     fontSize: 10,
     letterSpacing: 0.5,
     textTransform: 'uppercase',
@@ -191,6 +198,7 @@ const styles = StyleSheet.create({
   },
   tripTime: {
     color: colors.textMuted,
+    fontFamily: fontFamilies.body,
     fontSize: 11,
     textAlign: 'center',
   },

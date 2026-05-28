@@ -18,6 +18,8 @@ Start here if you are deciding which guide to read.
   repositories, migrations, trip samples, and export behavior.
 - [Telemetry and backend](developer/telemetry-and-backend.md): mobile telemetry
   orchestration, Fastify server, auth, WebSocket, and retry model.
+- [Cloud sync and social](developer/cloud-sync-and-social.md): optional
+  Supabase auth, local-wins sync, friends, nearby discovery, and leaderboards.
 - [Testing and operations](developer/testing-and-operations.md): commands,
   simulator flows, environment variables, and troubleshooting.
 - [Code ownership map](developer/code-ownership.md): where to make changes and

@@ -3,6 +3,7 @@ set -eu
 
 DEFAULT_ANDROID_HOME="$HOME/Library/Android/sdk"
 HOMEBREW_JAVA_17_HOME="/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home"
+ANDROID_STUDIO_JBR_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 
 if [ -z "${ANDROID_HOME:-}" ] && [ -d "$DEFAULT_ANDROID_HOME" ]; then
   export ANDROID_HOME="$DEFAULT_ANDROID_HOME"
@@ -25,6 +26,10 @@ if [ -z "${JAVA_HOME:-}" ] && command -v brew >/dev/null 2>&1; then
   if [ -d "$BREW_JAVA_17_HOME" ]; then
     export JAVA_HOME="$BREW_JAVA_17_HOME"
   fi
+fi
+
+if [ -z "${JAVA_HOME:-}" ] && [ -d "$ANDROID_STUDIO_JBR_HOME" ]; then
+  export JAVA_HOME="$ANDROID_STUDIO_JBR_HOME"
 fi
 
 if [ -n "${JAVA_HOME:-}" ]; then

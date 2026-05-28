@@ -276,6 +276,16 @@ EXPO_PUBLIC_V3L0CITY_WS_URL=ws://<lan-ip>:8787
 
 Telemetry is disabled unless both are valid.
 
+### Supabase Cloud and Social
+
+```bash
+EXPO_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+```
+
+Cloud sync, account, friends, nearby discovery, and leaderboards are disabled
+unless both are valid. The local app continues to work without them.
+
 ### Drive Simulation
 
 ```bash
@@ -379,6 +389,18 @@ EXPO_PUBLIC_V3L0CITY_WS_URL
 
 Both must be valid URLs. Placeholder values such as `<lan-ip>` are ignored by
 the config loader.
+
+### Cloud sync disabled
+
+Check both Supabase mobile env vars:
+
+```bash
+EXPO_PUBLIC_SUPABASE_URL
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+```
+
+Use a publishable key only. Never expose a Supabase secret or service-role key
+in the app bundle.
 
 ### Precise location required
 

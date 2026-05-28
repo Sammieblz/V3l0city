@@ -24,26 +24,61 @@ import {
 import Svg, { Line, Rect } from 'react-native-svg';
 
 import AverageSpeedDisplay from './AverageSpeedDisplay';
+import AccountSyncScreen, { type AccountEntryStep } from './AccountSyncScreen';
 import AppToast, { type AppToastMessage, type AppToastVariant } from './AppToast';
+import BrandMark from './BrandMark';
 import DebugOverlay from './DebugOverlay';
+import FindFriendsScreen from './FindFriendsScreen';
 import HorizontalCompass from './HorizontalCompass';
 import InsightsScreen from './InsightsScreen';
+import LeaderboardsScreen from './LeaderboardsScreen';
 import MiniCompass from './MiniCompass';
+import OnboardingScreen from './OnboardingScreen';
 import PressableScale from './PressableScale';
-import SideDrawer from './SideDrawer';
+import PrivacyPolicyScreen from './PrivacyPolicyScreen';
+import SideDrawer, { type DrawerAccountSummary } from './SideDrawer';
 import SpeedDial from './SpeedDial';
 import TripHistory from './TripHistory';
 import { tripTelemetryService } from '../api/tripTelemetryService';
-import { exportAsCsv, exportAsJson } from '../database/exportService';
+import {
+  cloudAuth,
+  isCloudConfigured,
+  syncLocalChanges,
+} from '../cloud/cloudService';
+import {
+  exportAsCsv,
+  exportAsJson,
+  pickAndImportJsonExport,
+} from '../database/exportService';
 import {
   getPreferences,
   savePreferences,
   type OrientationMode,
 } from '../database/preferencesRepository';
-import { clearTrips, getTrips, saveTrip } from '../database/tripRepository';
+import {
+  appendTripSpeedSample,
+  clearTrips,
+  createDraftTrip,
+  getPendingSyncChangeCount,
+  getTrips,
+  recoverActiveTrip,
+  saveTrip,
+} from '../database/tripRepository';
+import {
+  clearDriveSurfaceSnapshot,
+  endTripLiveActivity,
+  startTripLiveActivity,
+  updateTripLiveActivity,
+  writeDriveSurfaceSnapshot,
+} from '../driveSurface/driveSurfaceStore';
+import { buildDriveSurfaceSnapshot } from '../driveSurface/snapshot';
 import type { Trip, TripSpeedSample } from '../domain/trip';
 import { useVelocitySensors } from '../hooks/useVelocitySensors';
-import { colors, radii, spacing } from '../theme/paperTheme';
+import {
+  hasCompletedLocalOnboarding,
+  markLocalOnboardingComplete,
+} from '../onboarding/onboardingStorage';
+import { colors, fontFamilies, radii, spacing } from '../theme/paperTheme';
 import {
   getNotificationPermissionState,
   registerForPushNotifications,
@@ -52,9 +87,10 @@ import {
 } from '../utils/notifications';
 import {
   getSpeedometerScreenTitle,
-  SPEEDOMETER_DRAWER_ITEMS,
+  SPEEDOMETER_DRAWER_GROUPS,
   type SpeedometerScreen,
 } from '../utils/speedometerMenu';
+import { logAppWarning } from '../utils/logging';
 import { toDisplayDistance, toDisplaySpeed, type Units } from '../utils/speedMath';
 
 const MOUNT_OPTIONS = [
@@ -65,6 +101,7 @@ const MOUNT_OPTIONS = [
 ] as const;
 
 const TRIP_SPEED_SAMPLE_INTERVAL_MS = 500;
+const DRIVE_SURFACE_UPDATE_INTERVAL_MS = 500;
 const SIMULATED_DRIVE_ENABLED_BY_ENV =
   process.env.EXPO_PUBLIC_V3L0CITY_SIMULATED_DRIVE === '1';
 const HEADER_HEIGHT = 56;
@@ -156,6 +193,17 @@ export default function Speedometer() {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [activeScreen, setActiveScreen] =
     useState<SpeedometerScreen>('dashboard');
+  const [accountEntryStep, setAccountEntryStep] =
+    useState<AccountEntryStep>('landing');
+  const [drawerAccountSummary, setDrawerAccountSummary] =
+    useState<DrawerAccountSummary>({
+      signedIn: false,
+      title: 'Offline mode',
+      subtitle: 'Local trips stay on this device',
+    });
+  const [localOnboardingComplete, setLocalOnboardingComplete] = useState<
+    boolean | null
+  >(null);
   const [showSettings, setShowSettings] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [debugEnabled, setDebugEnabled] = useState<boolean>(__DEV__);
@@ -181,6 +229,10 @@ export default function Speedometer() {
   const lastTripSampleTimestamp = useRef<number | null>(null);
   const nextTripSampleSequence = useRef(1);
   const currentTripId = useRef<string | null>(null);
+  const currentTripBaseDistanceMeters = useRef(0);
+  const currentTripBaseMaxSpeedMps = useRef(0);
+  const lastDriveSurfaceWriteAt = useRef(0);
+  const liveActivityActive = useRef(false);
 
   useEffect(() => {
     if (isTripActive) {
@@ -266,12 +318,51 @@ export default function Speedometer() {
     dimensions.height - insets.top - spacing.lg,
   );
 
+  const effectiveDistanceMeters = isTripActive
+    ? currentTripBaseDistanceMeters.current + distanceMeters
+    : distanceMeters;
+  const effectiveMaxSpeedMps = isTripActive
+    ? Math.max(currentTripBaseMaxSpeedMps.current, maxSpeedMps)
+    : maxSpeedMps;
+  const activeElapsedSeconds =
+    isTripActive && currentTripStart
+      ? Math.max(1, (Date.now() - currentTripStart.getTime()) / 1000)
+      : 0;
+  const effectiveAverageSpeedMps =
+    isTripActive && activeElapsedSeconds > 0
+      ? effectiveDistanceMeters / activeElapsedSeconds
+      : averageSpeedMps;
+
   const speedDisplay = toDisplaySpeed(speedMps, units);
-  const averageDisplay = toDisplaySpeed(averageSpeedMps, units);
-  const maxDisplay = toDisplaySpeed(maxSpeedMps, units);
-  const distanceDisplay = toDisplayDistance(distanceMeters, units);
+  const averageDisplay = toDisplaySpeed(effectiveAverageSpeedMps, units);
+  const maxDisplay = toDisplaySpeed(effectiveMaxSpeedMps, units);
+  const distanceDisplay = toDisplayDistance(effectiveDistanceMeters, units);
   const maxDisplayRounded = Math.round(maxDisplay);
   const formattedElapsed = new Date(elapsedMs).toISOString().substring(11, 19);
+  const driveSurfaceSnapshot = useMemo(
+    () =>
+      buildDriveSurfaceSnapshot({
+        state,
+        units,
+        tripId: currentTripId.current,
+        tripActive: isTripActive,
+        tripPaused: isTripPaused,
+        distanceMeters: effectiveDistanceMeters,
+        averageSpeedMps: effectiveAverageSpeedMps,
+        maxSpeedMps: effectiveMaxSpeedMps,
+        elapsedMs,
+      }),
+    [
+      elapsedMs,
+      effectiveAverageSpeedMps,
+      effectiveDistanceMeters,
+      effectiveMaxSpeedMps,
+      isTripActive,
+      isTripPaused,
+      state,
+      units,
+    ],
+  );
 
   const isPoorSignal = quality === 'poor';
   const isPermissionError = status === 'permission_denied';
@@ -303,12 +394,72 @@ export default function Speedometer() {
     }
   }, []);
 
+  const refreshDrawerAccountSummary = useCallback(async () => {
+    const pendingCount = await getPendingSyncChangeCount();
+    if (!isCloudConfigured()) {
+      setDrawerAccountSummary({
+        signedIn: false,
+        title: 'Offline build',
+        subtitle:
+          pendingCount > 0
+            ? `${pendingCount} local change${
+                pendingCount === 1 ? '' : 's'
+              } saved`
+            : 'Cloud backup is not configured',
+      });
+      return;
+    }
+
+    try {
+      const session = await cloudAuth.getSession();
+      if (!session) {
+        setDrawerAccountSummary({
+          signedIn: false,
+          title: 'Offline mode',
+          subtitle:
+            pendingCount > 0
+              ? `${pendingCount} local change${
+                  pendingCount === 1 ? '' : 's'
+                } saved`
+              : 'Sign in for cloud backup',
+        });
+        return;
+      }
+
+      const profile = await cloudAuth.getProfile();
+      const title = profile?.displayName || profile?.username || session.email;
+      const backupText = profile?.syncEnabled
+        ? 'Automatic backup on'
+        : 'Automatic backup off';
+      setDrawerAccountSummary({
+        signedIn: true,
+        title: title ?? 'Signed in',
+        subtitle:
+          pendingCount > 0
+            ? `${backupText} • ${pendingCount} pending`
+            : backupText,
+      });
+    } catch (error) {
+      logAppWarning('account', error);
+      setDrawerAccountSummary({
+        signedIn: false,
+        title: 'Offline mode',
+        subtitle: 'Account status unavailable',
+      });
+    }
+  }, []);
+
   useEffect(() => {
     const load = async () => {
-      const [prefs, storedTrips] = await Promise.all([
+      const [prefs, storedTrips, completedLocalOnboarding] = await Promise.all([
         getPreferences(),
         getTrips(),
+        hasCompletedLocalOnboarding(),
       ]);
+      setLocalOnboardingComplete(completedLocalOnboarding);
+      if (!completedLocalOnboarding) {
+        setActiveScreen('onboarding');
+      }
       if (prefs) {
         setUnits(prefs.units);
         if (prefs.mountIndex >= 0 && prefs.mountIndex < MOUNT_OPTIONS.length) {
@@ -319,10 +470,37 @@ export default function Speedometer() {
         setOrientationMode(prefs.orientationMode ?? 'portrait');
       }
       setTrips(storedTrips);
+      const recovered = await recoverActiveTrip();
+      if (recovered) {
+        const lastSample = recovered.speedSamples.at(-1);
+        currentTripSamples.current = recovered.speedSamples;
+        lastTripSampleTimestamp.current = lastSample
+          ? new Date(lastSample.recordedAt).getTime()
+          : null;
+        nextTripSampleSequence.current = (lastSample?.sequence ?? 0) + 1;
+        currentTripId.current = recovered.id;
+        currentTripBaseDistanceMeters.current =
+          lastSample?.distanceMeters ?? recovered.totalDistanceMeters;
+        currentTripBaseMaxSpeedMps.current = recovered.maxSpeedMps;
+        setCurrentTripStart(new Date(recovered.startedAt));
+        setIsTripActive(true);
+        setIsTripPaused(true);
+        setToastMessage({
+          message: 'Recovered unfinished trip',
+          variant: 'warning',
+        });
+      }
       await applyOrientation(prefs?.orientationMode ?? 'portrait');
     };
     void load();
-  }, [applyOrientation]);
+    void refreshDrawerAccountSummary();
+  }, [applyOrientation, refreshDrawerAccountSummary]);
+
+  useEffect(() => {
+    if (drawerOpen) {
+      void refreshDrawerAccountSummary();
+    }
+  }, [drawerOpen, refreshDrawerAccountSummary]);
 
   useEffect(() => {
     const persist = async () => {
@@ -410,19 +588,35 @@ export default function Speedometer() {
     );
   }, [showToast]);
 
-  const startTrip = () => {
+  const syncSavedTripIfAllowed = useCallback(async () => {
+    if (!isCloudConfigured()) {
+      return;
+    }
+
+    try {
+      const session = await cloudAuth.getSession();
+      if (!session) {
+        return;
+      }
+      const profile = await cloudAuth.getProfile();
+      if (!profile?.syncEnabled) {
+        return;
+      }
+      const result = await syncLocalChanges();
+      if (!result.ok) {
+        logAppWarning('sync', result.message);
+      }
+      await refreshDrawerAccountSummary();
+    } catch (error) {
+      logAppWarning('sync', error);
+    }
+  }, [refreshDrawerAccountSummary]);
+
+  const startTrip = async () => {
     if (isTripActive) return;
     const start = new Date();
     const tripId = `${start.getTime()}`;
-    reset();
-    currentTripSamples.current = [];
-    lastTripSampleTimestamp.current = null;
-    nextTripSampleSequence.current = 1;
-    currentTripId.current = tripId;
-    setIsTripActive(true);
-    setIsTripPaused(false);
-    setCurrentTripStart(start);
-    void tripTelemetryService.startTrip({
+    const draftTrip: Trip = {
       id: tripId,
       startedAt: start.toISOString(),
       endedAt: start.toISOString(),
@@ -431,7 +625,20 @@ export default function Speedometer() {
       averageSpeedMps: 0,
       units,
       mountLabel,
-    });
+      recordStatus: 'draft',
+    };
+    await createDraftTrip(draftTrip);
+    reset();
+    currentTripSamples.current = [];
+    lastTripSampleTimestamp.current = null;
+    nextTripSampleSequence.current = 1;
+    currentTripId.current = tripId;
+    currentTripBaseDistanceMeters.current = 0;
+    currentTripBaseMaxSpeedMps.current = 0;
+    setIsTripActive(true);
+    setIsTripPaused(false);
+    setCurrentTripStart(start);
+    void tripTelemetryService.startTrip(draftTrip);
   };
 
   const stopAndSaveTrip = useCallback(async () => {
@@ -439,19 +646,27 @@ export default function Speedometer() {
     const end = new Date();
     const start = currentTripStart ?? end;
     const tripId = currentTripId.current ?? `${start.getTime()}`;
+    const totalDistanceMeters =
+      currentTripBaseDistanceMeters.current + distanceMeters;
+    const totalElapsedSeconds = Math.max(
+      1,
+      (end.getTime() - start.getTime()) / 1000,
+    );
     const trip: Trip = {
       id: tripId,
       startedAt: start.toISOString(),
       endedAt: end.toISOString(),
-      totalDistanceMeters: distanceMeters,
-      maxSpeedMps,
-      averageSpeedMps,
+      totalDistanceMeters,
+      maxSpeedMps: Math.max(currentTripBaseMaxSpeedMps.current, maxSpeedMps),
+      averageSpeedMps: totalDistanceMeters / totalElapsedSeconds,
       units,
       mountLabel,
+      recordStatus: 'completed',
     };
     const samples = currentTripSamples.current;
 
     await saveTrip(trip, samples);
+    void syncSavedTripIfAllowed();
     void tripTelemetryService.completeTrip(trip);
     const stored = await getTrips();
     setTrips(stored);
@@ -462,21 +677,23 @@ export default function Speedometer() {
     lastTripSampleTimestamp.current = null;
     nextTripSampleSequence.current = 1;
     currentTripId.current = null;
+    currentTripBaseDistanceMeters.current = 0;
+    currentTripBaseMaxSpeedMps.current = 0;
     hasAutoStartedThisSession.current = false;
     void scheduleTripSavedNotification(trip);
   }, [
-    averageSpeedMps,
     currentTripStart,
     distanceMeters,
     isTripActive,
     maxSpeedMps,
     mountLabel,
+    syncSavedTripIfAllowed,
     units,
   ]);
 
   const handleTripToggle = async () => {
     if (!isTripActive) {
-      startTrip();
+      await startTrip();
       showToast('Trip started', 'success');
       return;
     }
@@ -507,7 +724,20 @@ export default function Speedometer() {
 
   const openDrawer = () => setDrawerOpen(true);
   const closeDrawer = () => setDrawerOpen(false);
-  const returnToDashboard = useCallback(() => setActiveScreen('dashboard'), []);
+  const returnToDashboard = useCallback(() => {
+    setActiveScreen(
+      localOnboardingComplete === false ? 'onboarding' : 'dashboard',
+    );
+  }, [localOnboardingComplete]);
+
+  const completeLocalOnboarding = useCallback(
+    async (nextScreen: SpeedometerScreen = 'dashboard') => {
+      await markLocalOnboardingComplete();
+      setLocalOnboardingComplete(true);
+      setActiveScreen(nextScreen);
+    },
+    [],
+  );
 
   const handleDrawerHistory = () => {
     setActiveScreen('history');
@@ -518,6 +748,35 @@ export default function Speedometer() {
     setActiveScreen('insights');
     closeDrawer();
   };
+
+  const handleDrawerLeaderboards = () => {
+    setActiveScreen('leaderboards');
+    closeDrawer();
+  };
+
+  const handleDrawerFriends = () => {
+    setActiveScreen('friends');
+    closeDrawer();
+  };
+
+  const handleDrawerAccount = () => {
+    setAccountEntryStep('landing');
+    setActiveScreen('account');
+    closeDrawer();
+  };
+
+  const handleDrawerPrivacy = () => {
+    setActiveScreen('privacy');
+    closeDrawer();
+  };
+
+  const handleOnboardingAccountChoice = useCallback(
+    async (entryStep: AccountEntryStep) => {
+      setAccountEntryStep(entryStep);
+      await completeLocalOnboarding('account');
+    },
+    [completeLocalOnboarding],
+  );
 
   const handleDrawerSettings = () => {
     setShowSettings(true);
@@ -542,16 +801,61 @@ export default function Speedometer() {
     }
   };
 
+  const handleImportJson = async () => {
+    closeDrawer();
+    try {
+      const result = await pickAndImportJsonExport();
+      if (!result) {
+        return;
+      }
+
+      const [storedTrips, prefs] = await Promise.all([
+        getTrips(),
+        getPreferences(),
+      ]);
+      setTrips(storedTrips);
+      if (prefs) {
+        setUnits(prefs.units);
+        if (prefs.mountIndex >= 0 && prefs.mountIndex < MOUNT_OPTIONS.length) {
+          setMountIndex(prefs.mountIndex);
+        }
+        setAutoStart(prefs.autoStart);
+        setAutoSave(prefs.autoSave);
+        setOrientationMode(prefs.orientationMode);
+        await applyOrientation(prefs.orientationMode);
+      }
+
+      showToast(result.message, 'success');
+      void syncSavedTripIfAllowed();
+      void refreshDrawerAccountSummary();
+    } catch (error) {
+      logAppWarning('import', error);
+      showToast('Import failed. Choose a valid V3l0city JSON export.', 'error');
+    }
+  };
+
   const drawerItemHandlers = {
     history: handleDrawerHistory,
     insights: handleDrawerInsights,
+    leaderboards: handleDrawerLeaderboards,
+    friends: handleDrawerFriends,
+    account: handleDrawerAccount,
+    privacy: handleDrawerPrivacy,
     settings: handleDrawerSettings,
+    importJson: handleImportJson,
     json: handleExportJson,
     csv: handleExportCsv,
   };
-  const drawerItems = SPEEDOMETER_DRAWER_ITEMS.map((item) => ({
-    ...item,
-    onPress: drawerItemHandlers[item.key],
+  const drawerGroups = SPEEDOMETER_DRAWER_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.map((item) => ({
+      ...item,
+      description:
+        item.key === 'account'
+          ? drawerAccountSummary.subtitle
+          : item.description,
+      onPress: drawerItemHandlers[item.key],
+    })),
   }));
 
   const canReset = !isTripActive && distanceMeters > 0;
@@ -566,8 +870,7 @@ export default function Speedometer() {
         }
 
         if (drawerOpen) {
-          setDrawerOpen(false);
-          return true;
+          return false;
         }
 
         if (activeScreen !== 'dashboard') {
@@ -643,7 +946,7 @@ export default function Speedometer() {
       recordedAt: new Date(sampleTimestampMs).toISOString(),
       elapsedMs: Math.max(0, sampleTimestampMs - currentTripStart.getTime()),
       speedMps: state.speedMps,
-      distanceMeters: state.distanceMeters,
+      distanceMeters: currentTripBaseDistanceMeters.current + state.distanceMeters,
       headingDegrees: state.headingDegrees,
       headingSource: state.headingSource,
       headingAccuracyDegrees: state.headingAccuracyDegrees,
@@ -661,6 +964,7 @@ export default function Speedometer() {
       stale: state.stale,
     };
     currentTripSamples.current.push(sample);
+    void appendTripSpeedSample(sample);
     tripTelemetryService.recordSample(sample);
     nextTripSampleSequence.current += 1;
   }, [isTripActive, isTripPaused, currentTripStart, state]);
@@ -690,7 +994,7 @@ export default function Speedometer() {
       !hasAutoStartedThisSession.current
     ) {
       hasAutoStartedThisSession.current = true;
-      startTrip();
+      void startTrip();
       showToast('Trip autostarted', 'success');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -746,6 +1050,46 @@ export default function Speedometer() {
     showToast,
     state.isMoving,
   ]);
+
+  useEffect(() => {
+    const now = Date.now();
+    if (now - lastDriveSurfaceWriteAt.current < DRIVE_SURFACE_UPDATE_INTERVAL_MS) {
+      return;
+    }
+    lastDriveSurfaceWriteAt.current = now;
+
+    const publish = async () => {
+      try {
+        await writeDriveSurfaceSnapshot(driveSurfaceSnapshot);
+
+        if (driveSurfaceSnapshot.tripActive && !driveSurfaceSnapshot.tripPaused) {
+          if (liveActivityActive.current) {
+            await updateTripLiveActivity(driveSurfaceSnapshot);
+          } else {
+            await startTripLiveActivity(driveSurfaceSnapshot);
+            liveActivityActive.current = true;
+          }
+          return;
+        }
+
+        if (liveActivityActive.current) {
+          await endTripLiveActivity(driveSurfaceSnapshot);
+          liveActivityActive.current = false;
+        }
+      } catch (error) {
+        logAppWarning('drive-surface', error);
+      }
+    };
+
+    void publish();
+  }, [driveSurfaceSnapshot]);
+
+  useEffect(
+    () => () => {
+      void clearDriveSurfaceSnapshot();
+    },
+    [],
+  );
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', async (nextState) => {
@@ -917,13 +1261,17 @@ export default function Speedometer() {
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text style={styles.statLabel}>MAX</Text>
-            <Text style={styles.statValue}>{maxDisplayRounded}</Text>
+            <Text style={[styles.statValue, styles.statValueMax]}>
+              {maxDisplayRounded}
+            </Text>
             <Text style={styles.statUnit}>{units}</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text style={styles.statLabel}>DIST</Text>
-            <Text style={styles.statValue}>{distanceDisplay.toFixed(1)}</Text>
+            <Text style={[styles.statValue, styles.statValueDistance]}>
+              {distanceDisplay.toFixed(1)}
+            </Text>
             <Text style={styles.statUnit}>
               {units === 'km/h' ? 'km' : 'mi'}
             </Text>
@@ -979,13 +1327,18 @@ export default function Speedometer() {
             </View>
             <View style={styles.landscapeStat}>
               <Text style={styles.landscapeStatLabel}>Maximum</Text>
-              <Text style={styles.landscapeStatValue}>
+              <Text style={[styles.landscapeStatValue, styles.statValueMax]}>
                 {maxDisplayRounded} {units}
               </Text>
             </View>
             <View style={styles.landscapeStat}>
               <Text style={styles.landscapeStatLabel}>Distance</Text>
-              <Text style={styles.landscapeStatValue}>
+              <Text
+                style={[
+                  styles.landscapeStatValue,
+                  styles.statValueDistance,
+                ]}
+              >
                 {distanceDisplay.toFixed(1)} {units === 'km/h' ? 'km' : 'mi'}
               </Text>
             </View>
@@ -1202,6 +1555,9 @@ export default function Speedometer() {
     </Modal>
   );
 
+  const isOnboardingScreen = activeScreen === 'onboarding';
+  const isBlockingOnboarding =
+    isOnboardingScreen && localOnboardingComplete === false;
   const isDetailScreen = activeScreen !== 'dashboard';
   const screenTitle = getSpeedometerScreenTitle(activeScreen);
 
@@ -1216,7 +1572,9 @@ export default function Speedometer() {
           ]}
           mode="center-aligned"
         >
-          {isDetailScreen ? (
+          {isBlockingOnboarding ? (
+            <View style={styles.appbarActionSpacer} />
+          ) : isDetailScreen ? (
             <Appbar.BackAction
               onPress={returnToDashboard}
               accessibilityLabel="Back to dashboard"
@@ -1229,11 +1587,19 @@ export default function Speedometer() {
               onPress={openDrawer}
             />
           )}
-          <Appbar.Content
-            title={screenTitle}
-            titleStyle={styles.appbarTitle}
-          />
           {isDetailScreen ? (
+            <Appbar.Content
+              title={screenTitle}
+              titleStyle={styles.appbarTitle}
+            />
+          ) : (
+            <View style={styles.appbarCenter}>
+              <BrandMark size={isLandscapeLayout ? 30 : 34} />
+            </View>
+          )}
+          {isBlockingOnboarding ? (
+            <View style={styles.appbarActionSpacer} />
+          ) : isDetailScreen ? (
             <Appbar.Action
               icon="close"
               iconColor={colors.textSecondary}
@@ -1260,10 +1626,35 @@ export default function Speedometer() {
       </View>
 
       <View style={styles.body}>
-        {activeScreen === 'history' ? (
+        {activeScreen === 'onboarding' ? (
+          <OnboardingScreen
+            cloudConfigured={isCloudConfigured()}
+            onContinueOffline={() => void completeLocalOnboarding('dashboard')}
+            onSignIn={() => void handleOnboardingAccountChoice('sign-in')}
+            onSignUp={() => void handleOnboardingAccountChoice('sign-up')}
+            onOpenPrivacy={() => setActiveScreen('privacy')}
+          />
+        ) : activeScreen === 'history' ? (
           <TripHistory trips={trips} onClear={handleClearHistory} />
         ) : activeScreen === 'insights' ? (
           <InsightsScreen units={units} />
+        ) : activeScreen === 'leaderboards' ? (
+          <LeaderboardsScreen units={units} />
+        ) : activeScreen === 'friends' ? (
+          <FindFriendsScreen units={units} />
+        ) : activeScreen === 'account' ? (
+          <AccountSyncScreen
+            initialStep={accountEntryStep}
+            onAuthenticated={() => {
+              setActiveScreen('dashboard');
+              showToast('Signed in', 'success');
+              void refreshDrawerAccountSummary();
+            }}
+            onAccountChanged={() => void refreshDrawerAccountSummary()}
+            onOpenPrivacy={() => setActiveScreen('privacy')}
+          />
+        ) : activeScreen === 'privacy' ? (
+          <PrivacyPolicyScreen />
         ) : isLandscapeLayout ? (
           renderLandscapeDashboard()
         ) : (
@@ -1275,7 +1666,8 @@ export default function Speedometer() {
       <Portal>
         <SideDrawer
           visible={drawerOpen}
-          items={drawerItems}
+          groups={drawerGroups}
+          accountSummary={drawerAccountSummary}
           onDismiss={closeDrawer}
         />
         {renderSettings()}
@@ -1312,6 +1704,12 @@ const styles = StyleSheet.create({
     height: 48,
     width: 48,
   },
+  appbarCenter: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+    minWidth: 0,
+  },
   headerOrientationButton: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -1320,6 +1718,7 @@ const styles = StyleSheet.create({
   },
   appbarTitle: {
     color: colors.textPrimary,
+    fontFamily: fontFamilies.displayBold,
     fontSize: 20,
     fontWeight: '700',
     letterSpacing: 0,
@@ -1341,6 +1740,7 @@ const styles = StyleSheet.create({
   },
   messageTitle: {
     color: colors.textPrimary,
+    fontFamily: fontFamilies.display,
     fontSize: 18,
     fontWeight: '700',
     marginBottom: spacing.sm,
@@ -1348,12 +1748,14 @@ const styles = StyleSheet.create({
   },
   messageBody: {
     color: colors.textSecondary,
+    fontFamily: fontFamilies.body,
     fontSize: 14,
     lineHeight: 20,
     textAlign: 'center',
   },
   errorText: {
     color: colors.danger,
+    fontFamily: fontFamilies.bodySemiBold,
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
@@ -1369,6 +1771,7 @@ const styles = StyleSheet.create({
   },
   tripPausedLabel: {
     color: colors.textMuted,
+    fontFamily: fontFamilies.body,
     fontSize: 13,
     marginBottom: spacing.xs,
   },
@@ -1388,20 +1791,21 @@ const styles = StyleSheet.create({
     backgroundColor: colors.danger,
   },
   recordDot: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.textPrimary,
     borderRadius: 4,
     height: 8,
     marginRight: spacing.sm,
     width: 8,
   },
   tripButtonText: {
-    color: '#05070a',
+    color: colors.onAccent,
+    fontFamily: fontFamilies.bodyBold,
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: 0,
   },
   tripButtonTextActive: {
-    color: '#fff',
+    color: colors.onDanger,
   },
   resetButton: {
     marginTop: spacing.xs,
@@ -1410,6 +1814,7 @@ const styles = StyleSheet.create({
   },
   resetText: {
     color: colors.textMuted,
+    fontFamily: fontFamilies.bodySemiBold,
     fontSize: 13,
     fontWeight: '600',
   },
@@ -1433,6 +1838,7 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     color: colors.textMuted,
+    fontFamily: fontFamilies.bodySemiBold,
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 0,
@@ -1440,11 +1846,19 @@ const styles = StyleSheet.create({
   },
   statValue: {
     color: colors.textPrimary,
+    fontFamily: fontFamilies.numeric,
     fontSize: 26,
     fontWeight: '700',
   },
+  statValueMax: {
+    color: colors.brandGold,
+  },
+  statValueDistance: {
+    color: colors.brandTeal,
+  },
   statUnit: {
     color: colors.textSecondary,
+    fontFamily: fontFamilies.body,
     fontSize: 11,
     letterSpacing: 0,
     marginTop: 2,
@@ -1509,11 +1923,13 @@ const styles = StyleSheet.create({
   },
   landscapeStatLabel: {
     color: colors.textMuted,
+    fontFamily: fontFamilies.bodyMedium,
     fontSize: 10,
     marginBottom: 1,
   },
   landscapeStatValue: {
     color: colors.textPrimary,
+    fontFamily: fontFamilies.numeric,
     fontSize: 15,
     fontWeight: '700',
   },
@@ -1544,7 +1960,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.danger,
   },
   landscapeTripButtonText: {
-    color: '#05070a',
+    color: colors.onAccent,
+    fontFamily: fontFamilies.bodyBold,
     fontSize: 14,
     fontWeight: '700',
     letterSpacing: 0,
@@ -1576,6 +1993,7 @@ const styles = StyleSheet.create({
   },
   settingsTitle: {
     color: colors.textPrimary,
+    fontFamily: fontFamilies.display,
     fontSize: 19,
     fontWeight: '700',
   },
@@ -1596,6 +2014,7 @@ const styles = StyleSheet.create({
   },
   settingsLabel: {
     color: colors.textSecondary,
+    fontFamily: fontFamilies.bodySemiBold,
     fontSize: 13,
     fontWeight: '700',
     letterSpacing: 0,
@@ -1603,6 +2022,7 @@ const styles = StyleSheet.create({
   },
   settingsStatus: {
     color: colors.accent,
+    fontFamily: fontFamilies.bodyBold,
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0,
@@ -1610,6 +2030,7 @@ const styles = StyleSheet.create({
   },
   settingsHelper: {
     color: colors.textMuted,
+    fontFamily: fontFamilies.body,
     fontSize: 12,
     lineHeight: 17,
     marginTop: spacing.xs,

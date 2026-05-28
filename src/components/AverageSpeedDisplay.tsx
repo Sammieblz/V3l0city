@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { colors } from '../theme/paperTheme';
+import { colors, fontFamilies } from '../theme/paperTheme';
 
 interface AverageSpeedDisplayProps {
   averageSpeed: number;
@@ -21,6 +21,7 @@ const AverageSpeedDisplay: React.FC<AverageSpeedDisplayProps> = ({
 const styles = StyleSheet.create({
   label: {
     color: colors.textMuted,
+    fontFamily: fontFamilies.bodySemiBold,
     fontSize: 11,
     fontWeight: '600',
     textAlign: 'center',
@@ -29,12 +30,14 @@ const styles = StyleSheet.create({
   },
   value: {
     color: colors.textPrimary,
+    fontFamily: fontFamilies.numeric,
     fontSize: 26,
     fontWeight: '700',
     textAlign: 'center',
   },
   unit: {
     color: colors.textSecondary,
+    fontFamily: fontFamilies.body,
     fontSize: 11,
     marginTop: 2,
     textAlign: 'center',

@@ -5,6 +5,10 @@ client. The system is designed around one rule: local speed and local trip
 recording must keep working even when the backend is missing, offline, slow, or
 misconfigured.
 
+Supabase-powered account, sync, friends, nearby discovery, and leaderboard
+features are optional. They are layered on top of SQLite and must never become a
+precondition for speed, history, insights, or exports.
+
 ## Product Responsibilities
 
 The app is responsible for:
@@ -16,6 +20,8 @@ The app is responsible for:
 - Saving trip history locally.
 - Exporting trip data.
 - Optionally streaming telemetry for active trips.
+- Optionally syncing saved trips to the user's cloud account.
+- Showing aggregate social comparisons when the user signs in and opts in.
 
 The backend is responsible for:
 
@@ -25,6 +31,15 @@ The backend is responsible for:
 - Idempotent HTTP batch retries.
 - Trip completion summaries.
 - Development/debug trip summaries.
+
+The Supabase cloud/social backend is responsible for:
+
+- Email auth.
+- User profiles and signed-in devices.
+- Cloud trip restore and local-wins sync.
+- Friend requests and accepted relationships.
+- Coarse opt-in nearby discovery.
+- Aggregate leaderboard entries.
 
 The backend is not responsible for live speed calculation. The speedometer must
 not wait on the network.
@@ -54,9 +69,17 @@ React Native UI and trip recorder
   v
 SQLite local database
   |
-  | optional sidecar
+  | latest DriveSurfaceSnapshot, optional
+  v
+iOS WidgetKit / Live Activity and Android widget / active-trip notification
+  |
+  | optional sidecars
   v
 Telemetry WebSocket and HTTP API
+  |
+  | optional account/social layer
+  v
+Supabase Auth, Postgres, RLS, Edge Functions
 ```
 
 ## Tech Stack
@@ -74,6 +97,11 @@ Telemetry WebSocket and HTTP API
 - Expo Screen Orientation for portrait, landscape, and auto modes.
 - Expo Notifications for themed trip-saved notifications and optional push
   token registration on iOS/Android development or production builds.
+- Native WidgetKit, ActivityKit, and Android AppWidgetProvider surfaces for
+  glanceable active-trip snapshots.
+- Supabase JS for optional signed-in cloud sync and social features.
+- Expo SecureStore for Supabase auth session persistence.
+- AsyncStorage for non-secret install flags such as first-install onboarding.
 
 The live compass is a vehicle-direction compass. The native engine prefers GPS
 course while moving, uses device heading when stopped/slow, and marks the
@@ -97,6 +125,15 @@ heading source and quality for UI, storage, export, and telemetry.
 - `better-sqlite3`.
 - Zod.
 - `tsx`.
+
+### Cloud and Social
+
+- Supabase Auth for optional email sign-in.
+- Supabase Postgres with RLS for cloud trips, profiles, friends, and
+  leaderboards.
+- Supabase Edge Functions for authenticated sync and social operations.
+- Provider-neutral TypeScript interfaces in the mobile app so Supabase can be
+  replaced later.
 
 ## Repository Layout
 
@@ -201,6 +238,20 @@ Trip sample captured locally
 Telemetry consumes local trip samples. Network failures do not block the local
 write path.
 
+### Cloud Sync Flow
+
+```text
+SQLite trip/save/delete
+  -> sync metadata and sync_outbox
+  -> optional Supabase sync service
+  -> Edge Function validates user JWT
+  -> Postgres rows protected by RLS
+  -> restore inserts cloud trips only when missing locally
+```
+
+Local rows win. Cloud sync errors are surfaced as non-blocking status and never
+delete local data.
+
 ### Export Flow
 
 ```text
@@ -248,6 +299,9 @@ Expected failure handling:
 - No telemetry env vars: local app continues with telemetry disabled.
 - WebSocket disconnected: keep local trip recording, retry or flush over HTTP.
 - Server down: local trip save still succeeds.
+- Supabase missing or signed out: account/social screens show offline/auth
+  states, local app continues.
+- Sync conflict: current-device local row wins.
 - Export failure: show a toast, do not corrupt local data.
 
 ## Development Build Requirement

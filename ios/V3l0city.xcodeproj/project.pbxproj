@@ -12,9 +12,37 @@
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
 		3EC38B3F3012157481440FA7 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4C554E4262BFEE362750763 /* ExpoModulesProvider.swift */; };
 		44D0902333F5AFC2200E2E35 /* libPods-V3l0city.a in Frameworks */ = {isa = PBXBuildFile; fileRef = E8B8A11921771B2E1D3A40C6 /* libPods-V3l0city.a */; };
+		A30000000000000000000001 /* V3l0cityDriveWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000011 /* V3l0cityDriveWidgetBundle.swift */; };
+		A30000000000000000000002 /* V3l0cityDriveWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000012 /* V3l0cityDriveWidget.swift */; };
+		A30000000000000000000003 /* DriveSurfaceShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000015 /* DriveSurfaceShared.swift */; };
+		A30000000000000000000004 /* V3l0cityDriveWidgetExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A30000000000000000000010 /* V3l0cityDriveWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A30000000000000000000051 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 83CBB9F71A601CBA00E9B192 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A30000000000000000000030;
+			remoteInfo = V3l0cityDriveWidgetExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A30000000000000000000023 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A30000000000000000000004 /* V3l0cityDriveWidgetExtension.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		0626453DDC957D8C5400740F /* Pods-V3l0city.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-V3l0city.debug.xcconfig"; path = "Target Support Files/Pods-V3l0city/Pods-V3l0city.debug.xcconfig"; sourceTree = "<group>"; };
@@ -23,6 +51,12 @@
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = V3l0city/Info.plist; sourceTree = "<group>"; };
 		27A526A441A0C312132DF709 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = V3l0city/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		44087D399CA96546625743B8 /* Pods-V3l0city.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-V3l0city.release.xcconfig"; path = "Target Support Files/Pods-V3l0city/Pods-V3l0city.release.xcconfig"; sourceTree = "<group>"; };
+		A30000000000000000000010 /* V3l0cityDriveWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = V3l0cityDriveWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A30000000000000000000011 /* V3l0cityDriveWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = V3l0cityDriveWidgetBundle.swift; sourceTree = "<group>"; };
+		A30000000000000000000012 /* V3l0cityDriveWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = V3l0cityDriveWidget.swift; sourceTree = "<group>"; };
+		A30000000000000000000013 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A30000000000000000000014 /* V3l0cityDriveWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = V3l0cityDriveWidgetExtension.entitlements; sourceTree = "<group>"; };
+		A30000000000000000000015 /* DriveSurfaceShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DriveSurfaceShared.swift; path = "../modules/v3l0city-speed-engine/ios/DriveSurfaceShared.swift"; sourceTree = SOURCE_ROOT; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = V3l0city/SplashScreen.storyboard; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
 		E8B8A11921771B2E1D3A40C6 /* libPods-V3l0city.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-V3l0city.a"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -38,6 +72,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				44D0902333F5AFC2200E2E35 /* libPods-V3l0city.a in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A30000000000000000000021 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -104,6 +145,7 @@
 			isa = PBXGroup;
 			children = (
 				13B07FAE1A68108700A75B9A /* V3l0city */,
+				A30000000000000000000060 /* V3l0cityDriveWidget */,
 				832341AE1AAA6A7D00B99B32 /* Libraries */,
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
@@ -119,8 +161,21 @@
 			isa = PBXGroup;
 			children = (
 				13B07F961A680F5B00A75B9A /* V3l0city.app */,
+				A30000000000000000000010 /* V3l0cityDriveWidgetExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		A30000000000000000000060 /* V3l0cityDriveWidget */ = {
+			isa = PBXGroup;
+			children = (
+				A30000000000000000000011 /* V3l0cityDriveWidgetBundle.swift */,
+				A30000000000000000000012 /* V3l0cityDriveWidget.swift */,
+				A30000000000000000000015 /* DriveSurfaceShared.swift */,
+				A30000000000000000000013 /* Info.plist */,
+				A30000000000000000000014 /* V3l0cityDriveWidgetExtension.entitlements */,
+			);
+			path = V3l0cityDriveWidget;
 			sourceTree = "<group>";
 		};
 		BB2F792B24A3F905000567C9 /* Supporting */ = {
@@ -144,6 +199,7 @@
 				13B07F871A680F5B00A75B9A /* Sources */,
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
+				A30000000000000000000023 /* Embed App Extensions */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */,
 				7A2E1AB7FB676A88C55F6F93 /* [CP] Embed Pods Frameworks */,
@@ -151,11 +207,29 @@
 			buildRules = (
 			);
 			dependencies = (
+				A30000000000000000000050 /* PBXTargetDependency */,
 			);
 			name = V3l0city;
 			productName = V3l0city;
 			productReference = 13B07F961A680F5B00A75B9A /* V3l0city.app */;
 			productType = "com.apple.product-type.application";
+		};
+		A30000000000000000000030 /* V3l0cityDriveWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A30000000000000000000040 /* Build configuration list for PBXNativeTarget "V3l0cityDriveWidgetExtension" */;
+			buildPhases = (
+				A30000000000000000000020 /* Sources */,
+				A30000000000000000000021 /* Frameworks */,
+				A30000000000000000000022 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = V3l0cityDriveWidgetExtension;
+			productName = V3l0cityDriveWidgetExtension;
+			productReference = A30000000000000000000010 /* V3l0cityDriveWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -167,6 +241,9 @@
 				TargetAttributes = {
 					13B07F861A680F5B00A75B9A = {
 						LastSwiftMigration = 1250;
+					};
+					A30000000000000000000030 = {
+						CreatedOnToolsVersion = 15.0;
 					};
 				};
 			};
@@ -184,6 +261,7 @@
 			projectRoot = "";
 			targets = (
 				13B07F861A680F5B00A75B9A /* V3l0city */,
+				A30000000000000000000030 /* V3l0cityDriveWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -197,6 +275,13 @@
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
 				21765947A8AF94E23CC484F5 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A30000000000000000000022 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -336,7 +421,25 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A30000000000000000000020 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A30000000000000000000001 /* V3l0cityDriveWidgetBundle.swift in Sources */,
+				A30000000000000000000002 /* V3l0cityDriveWidget.swift in Sources */,
+				A30000000000000000000003 /* DriveSurfaceShared.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A30000000000000000000050 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A30000000000000000000030 /* V3l0cityDriveWidgetExtension */;
+			targetProxy = A30000000000000000000051 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {
@@ -358,7 +461,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -389,7 +492,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -523,6 +626,59 @@
 			};
 			name = Release;
 		};
+		A30000000000000000000041 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = V3l0cityDriveWidget/V3l0cityDriveWidgetExtension.entitlements;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = V3l0cityDriveWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
+				PRODUCT_BUNDLE_IDENTIFIER = com.v3l0city.app.drivewidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A30000000000000000000042 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = V3l0cityDriveWidget/V3l0cityDriveWidgetExtension.entitlements;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = V3l0cityDriveWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
+				PRODUCT_BUNDLE_IDENTIFIER = com.v3l0city.app.drivewidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -540,6 +696,15 @@
 			buildConfigurations = (
 				83CBBA201A601CBA00E9B192 /* Debug */,
 				83CBBA211A601CBA00E9B192 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A30000000000000000000040 /* Build configuration list for PBXNativeTarget "V3l0cityDriveWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A30000000000000000000041 /* Debug */,
+				A30000000000000000000042 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

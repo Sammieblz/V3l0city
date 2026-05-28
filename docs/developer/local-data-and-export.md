@@ -4,6 +4,9 @@ V3l0city stores user preferences, saved trips, and detailed trip speed samples
 locally with Expo SQLite. Local data is the durable source of truth for the
 mobile app.
 
+Cloud sync metadata is local too. Cloud state is optional and must not become
+the source of truth for the current device.
+
 ## Database Initialization
 
 Primary file:
@@ -44,6 +47,7 @@ Current explicit marker:
 ```text
 2026-05-19-trip-speed-sample-telemetry
 2026-05-26-trip-heading-diagnostics
+2026-05-27-offline-cloud-sync
 ```
 
 ### `preferences`
@@ -90,6 +94,12 @@ Columns:
 - `average_speed_mps`
 - `units`
 - `mount_label`
+- `record_status`
+- `local_updated_at`
+- `deleted_at`
+- `cloud_synced_at`
+- `cloud_sync_error`
+- `sync_status`
 
 Domain type:
 
@@ -138,9 +148,27 @@ Indexes:
 
 - `(trip_id, elapsed_ms)`
 - `(uploaded_at, trip_id, sequence)`
+- unique `(trip_id, sequence)`
 
 The table has a foreign key to `trips(id)` with cascade delete. Clearing trips
 also clears their samples.
+
+### `sync_outbox`
+
+Durable queue for optional cloud operations.
+
+Columns:
+
+- `id`
+- `operation_type`
+- `entity_type`
+- `entity_id`
+- `payload_json`
+- `status`
+- `attempt_count`
+- `last_error`
+- `created_at`
+- `updated_at`
 
 ## Repository Functions
 
@@ -149,10 +177,17 @@ also clears their samples.
 - `getTrips()`
 - `getTripById(id)`
 - `getTripSpeedSamples(tripId)`
+- `createDraftTrip(trip)`
+- `appendTripSpeedSample(sample)`
+- `recoverActiveTrip()`
 - `saveTrip(trip, samples)`
 - `updateTrip(trip)`
 - `deleteTrip(id)`
+- `softDeleteTrip(id)`
 - `clearTrips()`
+- `getUnsyncedTrips()`
+- `enqueueSyncOperation(...)`
+- `markSyncOperationDone(id)`
 - `getPendingTripSpeedSamples(tripId)`
 - `markTripSpeedSamplesUploaded(tripId, throughSequence, uploadedAt)`
 - `markTripSpeedSamplesUploadError(tripId, fromSequence, message)`
@@ -162,6 +197,10 @@ Important behavior:
 - `saveTrip()` writes the trip aggregate first.
 - If samples are provided, it deletes existing samples for that trip id and
   inserts the provided sample list.
+- `createDraftTrip()` is called before the dashboard marks a trip active.
+- `appendTripSpeedSample()` writes each active sample immediately.
+- `recoverActiveTrip()` returns the newest unfinished draft trip after crash or
+  restart.
 - Pending samples are samples with `uploaded_at IS NULL`.
 - Upload error state does not block local trip history.
 
@@ -172,7 +211,8 @@ Active trip sample flow:
 ```text
 VelocitySensorsState
   -> speedometer.tsx 500 ms sampling effect
-  -> in-memory currentTripSamples ref
+  -> append sample to SQLite
+  -> in-memory currentTripSamples ref for final aggregate save
   -> tripTelemetryService.recordSample
   -> saveTrip(trip, samples)
   -> trip_speed_samples
@@ -186,8 +226,8 @@ Sampling rules:
 - Sequence starts at 1 for each trip.
 - Timestamp is never earlier than trip start.
 
-The app stores samples in memory during the active trip. The samples become
-durable when the trip is saved.
+The app stores samples durably during the active trip. The in-memory sample list
+is a mirror, not the only copy.
 
 ## Legacy AsyncStorage Migration
 
@@ -201,6 +241,18 @@ into SQLite. If migration succeeds, the legacy keys are removed.
 
 Failures are ignored. This is intentional because a bad legacy payload should
 not prevent the app from opening.
+
+## Non-Secret AsyncStorage State
+
+New durable trip data belongs in SQLite. AsyncStorage is reserved for small,
+non-secret install-level flags and legacy migration support.
+
+Current app-owned keys include:
+
+- `v3l0city:onboarding:local:v1`: first-install onboarding completion.
+
+Supabase sessions are not stored here; they use Expo SecureStore through the
+cloud auth adapter.
 
 ## Export Architecture
 
@@ -254,8 +306,9 @@ Any feature touching storage should follow these rules:
 
 - Local trip save must succeed without telemetry.
 - Telemetry upload errors must not delete local samples.
+- Cloud sync errors must not delete local samples.
 - Export should read from SQLite only, not from server state.
-- Deleting a trip should delete its local samples.
+- Deleting a trip should create a local tombstone before eventual cloud purge.
 - Schema changes need migrations for existing installs.
 - New persisted fields should be included in export if they help debugging or
   user data portability.
