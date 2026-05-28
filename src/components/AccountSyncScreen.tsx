@@ -25,6 +25,7 @@ type AccountStep =
   | 'account-unavailable'
   | 'check-email'
   | 'cloud-onboarding'
+  | 'loading'
   | 'settings';
 
 type AccountSyncScreenProps = {
@@ -42,7 +43,9 @@ const AccountSyncScreen: React.FC<AccountSyncScreenProps> = ({
 }) => {
   const [session, setSession] = useState<CloudAuthSession | null>(null);
   const [profile, setProfile] = useState<CloudProfile | null>(null);
-  const [step, setStep] = useState<AccountStep>(initialStep);
+  const [step, setStep] = useState<AccountStep>(
+    initialStep === 'landing' ? 'loading' : initialStep,
+  );
 
   const [signInEmail, setSignInEmail] = useState('');
   const [signInPassword, setSignInPassword] = useState('');
@@ -316,7 +319,9 @@ const AccountSyncScreen: React.FC<AccountSyncScreenProps> = ({
         </View>
       )}
 
-      {step === 'landing' ? (
+      {step === 'loading' ? (
+        <AuthPanel title="Account / Sync" body="Checking your account status." />
+      ) : step === 'landing' ? (
         <Landing
           onSignUp={() => setStep('sign-up')}
           onSignIn={() => setStep('sign-in')}
@@ -550,7 +555,7 @@ const Landing: React.FC<{
 const AuthPanel: React.FC<{
   title: string;
   body: string;
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }> = ({ title, body, children }) => (
   <View style={styles.panel}>
     <Text style={styles.title}>{title}</Text>
