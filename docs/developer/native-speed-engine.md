@@ -352,8 +352,11 @@ repeatable city/highway profile from JS. It is useful for:
 - trip save/history
 - export
 - telemetry
+- widget and Live Activity visual checks during active simulated trips
 
-It does not validate native platform collectors.
+When a simulated trip is active, native iOS and Android modules mirror the
+simulated profile into drive surfaces so widgets can keep moving after the app
+is minimized. This still does not validate native platform collectors.
 
 ### iOS Location Simulation
 

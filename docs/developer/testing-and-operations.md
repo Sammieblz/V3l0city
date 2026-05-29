@@ -169,8 +169,8 @@ when lint exits successfully.
 
 ### App-Level Drive Simulator
 
-Use this for UI, local storage, export, and telemetry testing without native
-sensor validation.
+Use this for UI, local storage, export, telemetry, widgets, and Live Activity
+testing without native sensor validation.
 
 From settings:
 
@@ -187,6 +187,11 @@ EXPO_PUBLIC_V3L0CITY_SIMULATED_DRIVE=1 npm run ios
 ```bash
 EXPO_PUBLIC_V3L0CITY_SIMULATED_DRIVE=1 npm run android
 ```
+
+During an active simulated trip, native iOS and Android modules continue the
+same city/highway profile for drive surfaces. This means the home-screen widget,
+Live Activity, and Android active-trip notification can be inspected after the
+app is minimized. It still does not exercise real GPS or motion collectors.
 
 ### iOS Native Location Simulation
 
@@ -416,7 +421,12 @@ The native engine intentionally rejects approximate/coarse location.
 
 Check:
 
-- App is foregrounded.
+- If Drive Simulator is on, rebuild the development app after native changes and
+  start a trip before checking widgets.
+- For app-level Drive Simulator widget testing, the app may be minimized after
+  the trip starts.
+- For native route-injection testing, keep the app foregrounded until the native
+  collectors have started, then use widgets only after an active trip exists.
 - Location permission is granted.
 - Drive Simulator is off when testing native route injection.
 - Route script is running in another terminal.

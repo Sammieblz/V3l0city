@@ -15,7 +15,9 @@ export type DriveSurfaceSnapshot = {
   distanceMeters: number;
   distanceText: string;
   averageSpeedMps: number;
+  averageSpeedText: string;
   maxSpeedMps: number;
+  maxSpeedText: string;
   elapsedMs: number;
   elapsedText: string;
   headingDegrees: number | null;
@@ -27,6 +29,7 @@ export type DriveSurfaceSnapshot = {
   stale: boolean;
   permissionStatus: VelocitySensorsState['status'];
   updatedAtMs: number;
+  simulationActive: boolean;
 };
 
 type BuildDriveSurfaceSnapshotOptions = {
@@ -39,6 +42,7 @@ type BuildDriveSurfaceSnapshotOptions = {
   averageSpeedMps: number;
   maxSpeedMps: number;
   elapsedMs: number;
+  simulationActive?: boolean;
   nowMs?: number;
 };
 
@@ -92,9 +96,12 @@ export const buildDriveSurfaceSnapshot = ({
   averageSpeedMps,
   maxSpeedMps,
   elapsedMs,
+  simulationActive = false,
   nowMs = Date.now(),
 }: BuildDriveSurfaceSnapshotOptions): DriveSurfaceSnapshot => {
   const speedDisplay = toDisplaySpeed(clampFinite(state.speedMps), units);
+  const averageDisplay = toDisplaySpeed(clampFinite(averageSpeedMps), units);
+  const maxDisplay = toDisplaySpeed(clampFinite(maxSpeedMps), units);
   const distanceDisplay = toDisplayDistance(clampFinite(distanceMeters), units);
   const distanceUnit = units === 'km/h' ? 'km' : 'mi';
 
@@ -109,7 +116,9 @@ export const buildDriveSurfaceSnapshot = ({
     distanceMeters: clampFinite(distanceMeters),
     distanceText: `${distanceDisplay.toFixed(1)} ${distanceUnit}`,
     averageSpeedMps: clampFinite(averageSpeedMps),
+    averageSpeedText: `${Math.round(averageDisplay)}`,
     maxSpeedMps: clampFinite(maxSpeedMps),
+    maxSpeedText: `${Math.round(maxDisplay)}`,
     elapsedMs: clampFinite(elapsedMs),
     elapsedText: formatElapsed(elapsedMs),
     headingDegrees: state.headingDegrees,
@@ -121,6 +130,7 @@ export const buildDriveSurfaceSnapshot = ({
     stale: state.stale,
     permissionStatus: state.status,
     updatedAtMs: nowMs,
+    simulationActive,
   };
 };
 

@@ -21,9 +21,9 @@ by subsystem rather than by chronology.
 - [Cloud Sync and Social](cloud-sync-and-social.md): optional Supabase auth,
   signed-in onboarding, local-wins sync, friends, nearby discovery, and
   aggregate leaderboards.
-- [Widgets and Car Surfaces](widgets-and-car-surfaces.md): shared drive
-  snapshots, iOS WidgetKit/Live Activity support, Android home-screen widgets,
-  and CarPlay/Android Auto constraints.
+- [Widgets and Car Surfaces](widgets-and-car-surfaces.md): native live drive
+  sessions, iOS WidgetKit/Live Activity support, Android home-screen widgets,
+  simulated drive surfaces, and CarPlay/Android Auto constraints.
 - [Testing and Operations](testing-and-operations.md): validation commands,
   simulator workflows, native builds, environment variables, and troubleshooting.
 - [Code Ownership Map](code-ownership.md): where to make changes by feature

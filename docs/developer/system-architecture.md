@@ -1,9 +1,11 @@
 # System Architecture
 
-V3l0city is a foreground-only speedometer, trip recorder, and optional telemetry
-client. The system is designed around one rule: local speed and local trip
-recording must keep working even when the backend is missing, offline, slow, or
-misconfigured.
+V3l0city is an offline-first speedometer, trip recorder, and optional telemetry
+client. The speed engine is foreground-first, but a user-started active trip can
+run a native live drive session for widgets, Live Activities, and the Android
+active-trip notification. The system is designed around one rule: local speed
+and local trip recording must keep working even when the backend is missing,
+offline, slow, or misconfigured.
 
 Supabase-powered account, sync, friends, nearby discovery, and leaderboard
 features are optional. They are layered on top of SQLite and must never become a
@@ -69,7 +71,7 @@ React Native UI and trip recorder
   v
 SQLite local database
   |
-  | latest DriveSurfaceSnapshot, optional
+  | active-trip DriveSurfaceSnapshot and native live session
   v
 iOS WidgetKit / Live Activity and Android widget / active-trip notification
   |
@@ -263,16 +265,23 @@ User selects JSON or CSV
   -> open platform share sheet
 ```
 
-## Foreground-Only Constraint
+## Active-Trip Background Constraint
 
-The native speed engine stops collectors when the app enters the background.
-Background route tracking is not implemented. `autoSave` saves an active trip on
-background transition, but it does not continue recording in the background.
+The native speed engine is foreground-first until the user starts a trip. During
+a user-started active trip, the live drive session keeps native collectors
+running for widgets, Live Activities, and the Android foreground-service
+notification until the trip is stopped/saved.
 
-Any future background tracking work should be treated as a major architecture
-change. It would require explicit platform permissions, foreground service
-handling on Android, background location modes on iOS, battery policy decisions,
-and new user-facing privacy copy.
+This is not passive always-on tracking. Widgets do not start GPS by themselves;
+they display the active trip owned by the app/native live session. Any expansion
+beyond active-trip live surfaces should still be treated as a major architecture
+change with new privacy, battery, and store-review decisions.
+
+Development Drive Simulator is the exception for testing: React marks the
+drive-surface snapshot with `simulationActive`, and native iOS/Android code
+continues a matching simulated route for widgets and Live Activity when the app
+is minimized. That path is for visual and lifecycle testing, not native sensor
+validation.
 
 ## Accuracy Philosophy
 

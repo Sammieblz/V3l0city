@@ -23,13 +23,16 @@
       "bundleIdentifier": "com.v3l0city.app",
       "buildNumber": "1",
       "infoPlist": {
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "V3l0city uses precise location to calculate speed, distance, vehicle direction, and trip history during active trips.",
-        "NSLocationAlwaysUsageDescription": "V3l0city uses precise location to calculate speed, distance, vehicle direction, and trip history during active trips.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "V3l0city uses precise location during active trips to calculate speed, distance, vehicle direction, and live widgets or Live Activities after the screen locks.",
+        "NSLocationAlwaysUsageDescription": "V3l0city uses precise location during active trips to keep speed, distance, vehicle direction, and live widgets working after the screen locks.",
         "NSLocationWhenInUseUsageDescription": "V3l0city uses precise location while the app is open to calculate speed, distance, and vehicle direction.",
         "NSLocationTemporaryUsageDescriptionDictionary": {
           "V3l0cityPreciseLocation": "V3l0city needs Precise Location to calculate accurate speed, distance, and vehicle direction."
         },
         "NSMotionUsageDescription": "V3l0city uses motion sensors to smooth speed changes and provide compass fallback when GPS course is unavailable.",
+        "UIBackgroundModes": [
+          "location"
+        ],
         "NSSupportsLiveActivities": true,
         "NSSupportsLiveActivitiesFrequentUpdates": true
       }
@@ -44,6 +47,9 @@
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
         "INTERNET",
         "POST_NOTIFICATIONS"
       ],

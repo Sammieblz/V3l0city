@@ -3,10 +3,10 @@
   android:description="@string/v3l0city_drive_widget_description"
   android:initialLayout="@layout/v3l0city_drive_widget"
   android:minWidth="180dp"
-  android:minHeight="110dp"
+  android:minHeight="150dp"
   android:previewLayout="@layout/v3l0city_drive_widget"
   android:resizeMode="horizontal|vertical"
   android:targetCellWidth="3"
-  android:targetCellHeight="2"
+  android:targetCellHeight="3"
   android:updatePeriodMillis="1800000"
   android:widgetCategory="home_screen" />

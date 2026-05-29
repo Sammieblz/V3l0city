@@ -1,6 +1,7 @@
 import CoreLocation
 import CoreMotion
 import ExpoModulesCore
+import UIKit
 import WidgetKit
 
 #if canImport(ActivityKit)
@@ -11,6 +12,24 @@ private let speedUpdateEvent = "speedUpdate"
 private let speedErrorEvent = "speedError"
 private let gravityMps2 = 9.80665
 private let preciseLocationPurposeKey = "V3l0cityPreciseLocation"
+private let driveSurfacePublishIntervalMs = 1000.0
+private let driveWidgetReloadIntervalMs = 60000.0
+private let simulatedDriveTickSeconds = 1.0
+private let simulatedDriveLoopSeconds = 62.0
+private let simulatedCitySpeedMps = 13.4
+private let simulatedSlowRollSpeedMps = 5.4
+private let simulatedHighwaySpeedMps = 24.6
+
+private struct LiveDriveSession {
+  var tripId: String?
+  var units: String
+  var tripPaused: Bool
+  var distanceOffsetMeters: Double
+  var maxSpeedBaselineMps: Double
+  var startedAtMs: Double
+  var simulationActive: Bool
+  var simulatedDistanceOffsetMeters: Double
+}
 
 public final class V3l0citySpeedEngineModule: Module {
   private let engine = V3l0citySpeedEngineWrapper()
@@ -23,6 +42,12 @@ public final class V3l0citySpeedEngineModule: Module {
   private var isStarted = false
   private var lastEmitTimestampMs = 0.0
   private var outputIntervalMs = 100.0
+  private var liveDriveSession: LiveDriveSession?
+  private var lastDriveSurfacePublishMs = 0.0
+  private var lastWidgetReloadMs = 0.0
+  private var simulatedDriveTimer: Timer?
+  private var simulatedDriveBackgroundTask: UIBackgroundTaskIdentifier = .invalid
+  private var lastEngineState: [String: Any] = [:]
 
   public func definition() -> ModuleDefinition {
     Name("V3l0citySpeedEngine")
@@ -68,6 +93,18 @@ public final class V3l0citySpeedEngineModule: Module {
       self.clearDriveSurfaceSnapshot()
     }
 
+    AsyncFunction("startLiveDriveSession") { (snapshot: [String: Any]) in
+      self.startLiveDriveSession(snapshot)
+    }
+
+    AsyncFunction("updateLiveDriveSession") { (snapshot: [String: Any]) in
+      self.updateLiveDriveSession(snapshot)
+    }
+
+    AsyncFunction("stopLiveDriveSession") { (snapshot: [String: Any]) in
+      self.stopLiveDriveSession(snapshot)
+    }
+
     AsyncFunction("startTripLiveActivity") { (snapshot: [String: Any]) in
       self.startTripLiveActivity(snapshot)
     }
@@ -90,11 +127,15 @@ public final class V3l0citySpeedEngineModule: Module {
     }
 
     OnAppEntersBackground {
-      self.stopCollectors()
+      if self.liveDriveSession == nil {
+        self.stopCollectors()
+      }
     }
 
     OnDestroy {
-      self.stopCollectors()
+      if self.liveDriveSession == nil {
+        self.stopCollectors()
+      }
     }
   }
 
@@ -147,6 +188,8 @@ public final class V3l0citySpeedEngineModule: Module {
 
   private func startLocationCollectors() {
     isStarted = true
+    locationManager.allowsBackgroundLocationUpdates = liveDriveSession != nil
+    locationManager.showsBackgroundLocationIndicator = liveDriveSession != nil
     locationManager.startUpdatingLocation()
     if CLLocationManager.headingAvailable() {
       locationManager.headingFilter = kCLHeadingFilterNone
@@ -184,6 +227,8 @@ public final class V3l0citySpeedEngineModule: Module {
 
   private func stopCollectors() {
     isStarted = false
+    locationManager.allowsBackgroundLocationUpdates = false
+    locationManager.showsBackgroundLocationIndicator = false
     locationManager.stopUpdatingLocation()
     locationManager.stopUpdatingHeading()
     motionManager.stopDeviceMotionUpdates()
@@ -303,14 +348,16 @@ public final class V3l0citySpeedEngineModule: Module {
       return
     }
     lastEmitTimestampMs = nowMs
+    let body = state.reduce(into: [String: Any]()) { result, entry in
+      guard let key = entry.key as? String else {
+        return
+      }
+      result[key] = entry.value
+    }
+    lastEngineState = body
+    publishLiveDriveSurface(from: body, force: force)
 
     DispatchQueue.main.async {
-      let body = state.reduce(into: [String: Any]()) { result, entry in
-        guard let key = entry.key as? String else {
-          return
-        }
-        result[key] = entry.value
-      }
       self.sendEvent(speedUpdateEvent, body)
     }
   }
@@ -350,9 +397,7 @@ public final class V3l0citySpeedEngineModule: Module {
     defaults.set(json, forKey: v3l0cityDriveSurfaceSnapshotKey)
     defaults.synchronize()
 
-    if #available(iOS 14.0, *) {
-      WidgetCenter.shared.reloadAllTimelines()
-    }
+    requestWidgetReload(force: boolValue(snapshot, "simulationActive", fallback: false))
   }
 
   private func clearDriveSurfaceSnapshot() {
@@ -360,9 +405,335 @@ public final class V3l0citySpeedEngineModule: Module {
     defaults.removeObject(forKey: v3l0cityDriveSurfaceSnapshotKey)
     defaults.synchronize()
 
-    if #available(iOS 14.0, *) {
-      WidgetCenter.shared.reloadAllTimelines()
+    requestWidgetReload(force: true)
+  }
+
+  private func startLiveDriveSession(_ snapshot: [String: Any]) {
+    updateLiveSession(from: snapshot)
+    lastDriveSurfacePublishMs = 0
+    let simulationActive = boolValue(snapshot, "simulationActive", fallback: false)
+    if simulationActive {
+      startSimulatedDriveTimer()
+    } else if locationManager.authorizationStatus == .authorizedWhenInUse {
+      locationManager.requestAlwaysAuthorization()
     }
+    if isStarted && !simulationActive {
+      locationManager.allowsBackgroundLocationUpdates = true
+      locationManager.showsBackgroundLocationIndicator = true
+    }
+    writeDriveSurfaceSnapshot(snapshot)
+    requestWidgetReload(force: true)
+    startTripLiveActivity(snapshot)
+  }
+
+  private func updateLiveDriveSession(_ snapshot: [String: Any]) {
+    guard liveDriveSession != nil || boolValue(snapshot, "tripActive", fallback: false) else {
+      writeDriveSurfaceSnapshot(snapshot)
+      return
+    }
+    updateLiveSession(from: snapshot)
+    if boolValue(snapshot, "simulationActive", fallback: false) {
+      startSimulatedDriveTimer()
+    }
+    writeDriveSurfaceSnapshot(snapshot)
+  }
+
+  private func stopLiveDriveSession(_ snapshot: [String: Any]) {
+    liveDriveSession = nil
+    lastDriveSurfacePublishMs = 0
+    stopSimulatedDriveTimer()
+    locationManager.allowsBackgroundLocationUpdates = false
+    locationManager.showsBackgroundLocationIndicator = false
+    endTripLiveActivity(snapshot)
+    clearDriveSurfaceSnapshot()
+  }
+
+  private func requestWidgetReload(force: Bool) {
+    guard #available(iOS 14.0, *) else {
+      return
+    }
+
+    let nowMs = Date().timeIntervalSince1970 * 1000.0
+    if !force && nowMs - lastWidgetReloadMs < driveWidgetReloadIntervalMs {
+      return
+    }
+
+    lastWidgetReloadMs = nowMs
+    WidgetCenter.shared.reloadAllTimelines()
+  }
+
+  private func updateLiveSession(from snapshot: [String: Any]) {
+    let nowMs = Date().timeIntervalSince1970 * 1000.0
+    let engineDistanceMeters = doubleValue(lastEngineState, "distanceMeters", fallback: 0)
+    let snapshotDistanceMeters = doubleValue(snapshot, "distanceMeters", fallback: 0)
+    let elapsedMs = doubleValue(snapshot, "elapsedMs", fallback: 0)
+    let simulationActive = boolValue(snapshot, "simulationActive", fallback: false)
+    let simulatedDistanceOffsetMeters = simulationActive
+      ? snapshotDistanceMeters - simulatedDistance(at: elapsedMs / 1000.0)
+      : 0
+    liveDriveSession = LiveDriveSession(
+      tripId: optionalStringValue(snapshot, "tripId"),
+      units: stringValue(snapshot, "units", fallback: "MPH"),
+      tripPaused: boolValue(snapshot, "tripPaused", fallback: false),
+      distanceOffsetMeters: max(0, snapshotDistanceMeters - engineDistanceMeters),
+      maxSpeedBaselineMps: max(0, doubleValue(snapshot, "maxSpeedMps", fallback: 0) - doubleValue(lastEngineState, "maxSpeedMps", fallback: 0)),
+      startedAtMs: nowMs - max(0, elapsedMs),
+      simulationActive: simulationActive,
+      simulatedDistanceOffsetMeters: simulatedDistanceOffsetMeters
+    )
+  }
+
+  private func startSimulatedDriveTimer() {
+    stopCollectors()
+    beginSimulatedDriveBackgroundTask()
+    if simulatedDriveTimer != nil {
+      return
+    }
+    publishSimulatedLiveDriveSurface()
+    let timer = Timer(timeInterval: simulatedDriveTickSeconds, repeats: true) { [weak self] _ in
+      self?.publishSimulatedLiveDriveSurface()
+    }
+    simulatedDriveTimer = timer
+    RunLoop.main.add(timer, forMode: .common)
+  }
+
+  private func stopSimulatedDriveTimer() {
+    simulatedDriveTimer?.invalidate()
+    simulatedDriveTimer = nil
+    endSimulatedDriveBackgroundTask()
+  }
+
+  private func beginSimulatedDriveBackgroundTask() {
+    guard simulatedDriveBackgroundTask == .invalid else {
+      return
+    }
+    simulatedDriveBackgroundTask = UIApplication.shared.beginBackgroundTask(withName: "V3l0citySimulatedDrive") { [weak self] in
+      self?.endSimulatedDriveBackgroundTask()
+    }
+  }
+
+  private func endSimulatedDriveBackgroundTask() {
+    guard simulatedDriveBackgroundTask != .invalid else {
+      return
+    }
+    UIApplication.shared.endBackgroundTask(simulatedDriveBackgroundTask)
+    simulatedDriveBackgroundTask = .invalid
+  }
+
+  private func publishSimulatedLiveDriveSurface() {
+    guard let session = liveDriveSession, session.simulationActive else {
+      return
+    }
+
+    let nowMs = Date().timeIntervalSince1970 * 1000.0
+    let elapsedMs = max(0, nowMs - session.startedAtMs)
+    let elapsedSeconds = elapsedMs / 1000.0
+    let speedMps = simulatedSpeed(at: elapsedSeconds)
+    let distanceMeters = max(0, session.simulatedDistanceOffsetMeters + simulatedDistance(at: elapsedSeconds))
+    let averageSpeedMps = elapsedSeconds > 1 ? distanceMeters / elapsedSeconds : 0
+    let maxSpeedMps = max(session.maxSpeedBaselineMps, simulatedMaxSpeed(at: elapsedSeconds))
+    let headingDegrees = simulatedHeading(at: elapsedSeconds)
+
+    let snapshot: [String: Any] = [
+      "schemaVersion": 1,
+      "tripId": session.tripId ?? NSNull(),
+      "tripActive": true,
+      "tripPaused": session.tripPaused,
+      "speedMps": speedMps,
+      "speedText": formattedSpeed(speedMps, units: session.units),
+      "units": session.units,
+      "distanceMeters": distanceMeters,
+      "distanceText": formattedDistance(distanceMeters, units: session.units),
+      "averageSpeedMps": averageSpeedMps,
+      "averageSpeedText": formattedSpeed(averageSpeedMps, units: session.units),
+      "maxSpeedMps": maxSpeedMps,
+      "maxSpeedText": formattedSpeed(maxSpeedMps, units: session.units),
+      "elapsedMs": elapsedMs,
+      "elapsedText": formattedElapsed(elapsedMs),
+      "headingDegrees": headingDegrees,
+      "headingText": formattedHeading(headingDegrees),
+      "headingSource": speedMps >= 1 ? "course" : "device",
+      "headingQuality": "good",
+      "signalQuality": "good",
+      "signalText": "Simulated",
+      "stale": false,
+      "permissionStatus": "ready",
+      "updatedAtMs": nowMs,
+      "simulationActive": true
+    ]
+    writeDriveSurfaceSnapshot(snapshot)
+    startTripLiveActivity(snapshot)
+  }
+
+  private func publishLiveDriveSurface(from state: [String: Any], force: Bool) {
+    guard let session = liveDriveSession else {
+      return
+    }
+    let nowMs = Date().timeIntervalSince1970 * 1000.0
+    if !force && nowMs - lastDriveSurfacePublishMs < driveSurfacePublishIntervalMs {
+      return
+    }
+    lastDriveSurfacePublishMs = nowMs
+
+    let speedMps = doubleValue(state, "speedMps", fallback: 0)
+    let engineDistanceMeters = doubleValue(state, "distanceMeters", fallback: 0)
+    let distanceMeters = max(0, session.distanceOffsetMeters + engineDistanceMeters)
+    let stateMaxMps = doubleValue(state, "maxSpeedMps", fallback: 0)
+    let maxSpeedMps = max(session.maxSpeedBaselineMps, stateMaxMps)
+    let elapsedMs = max(0, nowMs - session.startedAtMs)
+    let averageSpeedMps = elapsedMs > 1000 ? distanceMeters / (elapsedMs / 1000.0) : doubleValue(state, "averageSpeedMps", fallback: 0)
+    let headingDegrees = nullableDoubleValue(state, "headingDegrees")
+    let quality = stringValue(state, "quality", fallback: "poor")
+    let stale = boolValue(state, "stale", fallback: false)
+
+    let snapshot: [String: Any] = [
+      "schemaVersion": 1,
+      "tripId": session.tripId ?? NSNull(),
+      "tripActive": true,
+      "tripPaused": session.tripPaused,
+      "speedMps": speedMps,
+      "speedText": formattedSpeed(speedMps, units: session.units),
+      "units": session.units,
+      "distanceMeters": distanceMeters,
+      "distanceText": formattedDistance(distanceMeters, units: session.units),
+      "averageSpeedMps": averageSpeedMps,
+      "averageSpeedText": formattedSpeed(averageSpeedMps, units: session.units),
+      "maxSpeedMps": maxSpeedMps,
+      "maxSpeedText": formattedSpeed(maxSpeedMps, units: session.units),
+      "elapsedMs": elapsedMs,
+      "elapsedText": formattedElapsed(elapsedMs),
+      "headingDegrees": headingDegrees ?? NSNull(),
+      "headingText": formattedHeading(headingDegrees),
+      "headingSource": stringValue(state, "headingSource", fallback: "none"),
+      "headingQuality": stringValue(state, "headingQuality", fallback: "poor"),
+      "signalQuality": quality,
+      "signalText": signalText(quality: quality, stale: stale),
+      "stale": stale,
+      "permissionStatus": "ready",
+      "updatedAtMs": nowMs,
+      "simulationActive": false
+    ]
+    writeDriveSurfaceSnapshot(snapshot)
+    startTripLiveActivity(snapshot)
+  }
+
+  private func formattedSpeed(_ speedMps: Double, units: String) -> String {
+    let display = units == "km/h" ? speedMps * 3.6 : speedMps * 2.2369362921
+    return "\(Int(round(max(0, display))))"
+  }
+
+  private func formattedDistance(_ distanceMeters: Double, units: String) -> String {
+    if units == "km/h" {
+      return String(format: "%.1f km", max(0, distanceMeters) / 1000.0)
+    }
+    return String(format: "%.1f mi", max(0, distanceMeters) / 1609.344)
+  }
+
+  private func formattedElapsed(_ elapsedMs: Double) -> String {
+    let totalSeconds = max(0, Int(elapsedMs / 1000.0))
+    let hours = totalSeconds / 3600
+    let minutes = (totalSeconds % 3600) / 60
+    let seconds = totalSeconds % 60
+    return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
+  }
+
+  private func formattedHeading(_ headingDegrees: Double?) -> String {
+    guard let headingDegrees else {
+      return "--"
+    }
+    let normalized = headingDegrees.truncatingRemainder(dividingBy: 360) < 0
+      ? headingDegrees.truncatingRemainder(dividingBy: 360) + 360
+      : headingDegrees.truncatingRemainder(dividingBy: 360)
+    return "\(Int(round(normalized)))°"
+  }
+
+  private func signalText(quality: String, stale: Bool) -> String {
+    if stale {
+      return "Stale"
+    }
+    if quality == "good" {
+      return "Good"
+    }
+    if quality == "medium" {
+      return "Fair"
+    }
+    return "Poor"
+  }
+
+  private func simulatedSpeed(at elapsedSeconds: Double) -> Double {
+    let t = positiveRemainder(elapsedSeconds, simulatedDriveLoopSeconds)
+    if t < 1.5 {
+      return 0
+    }
+    if t < 7.5 {
+      return lerp(0, simulatedCitySpeedMps, easeInOut((t - 1.5) / 6.0))
+    }
+    if t < 18 {
+      return simulatedCitySpeedMps + sin(t * 1.7) * 0.7
+    }
+    if t < 24 {
+      return lerp(simulatedCitySpeedMps, simulatedSlowRollSpeedMps, easeInOut((t - 18) / 6.0))
+    }
+    if t < 29 {
+      return simulatedSlowRollSpeedMps + sin(t * 1.2) * 0.35
+    }
+    if t < 36 {
+      return lerp(simulatedSlowRollSpeedMps, simulatedHighwaySpeedMps, easeInOut((t - 29) / 7.0))
+    }
+    if t < 50 {
+      return simulatedHighwaySpeedMps + sin(t * 0.9) * 1.2
+    }
+    if t < 57 {
+      return lerp(simulatedHighwaySpeedMps, 0, easeInOut((t - 50) / 7.0))
+    }
+    return 0
+  }
+
+  private func simulatedHeading(at elapsedSeconds: Double) -> Double {
+    positiveRemainder(32 + elapsedSeconds * 2.8 + sin(elapsedSeconds / 6.0) * 24, 360)
+  }
+
+  private func simulatedDistance(at elapsedSeconds: Double) -> Double {
+    if elapsedSeconds <= 0 {
+      return 0
+    }
+    var distance = 0.0
+    var t = 0.0
+    var previousSpeed = simulatedSpeed(at: 0)
+    let step = 0.5
+    while t < elapsedSeconds {
+      let nextT = min(elapsedSeconds, t + step)
+      let nextSpeed = simulatedSpeed(at: nextT)
+      distance += ((previousSpeed + nextSpeed) / 2.0) * (nextT - t)
+      t = nextT
+      previousSpeed = nextSpeed
+    }
+    return distance
+  }
+
+  private func simulatedMaxSpeed(at elapsedSeconds: Double) -> Double {
+    var maxSpeed = 0.0
+    var t = 0.0
+    let step = 0.5
+    while t <= elapsedSeconds {
+      maxSpeed = max(maxSpeed, simulatedSpeed(at: t))
+      t += step
+    }
+    return maxSpeed
+  }
+
+  private func lerp(_ from: Double, _ to: Double, _ amount: Double) -> Double {
+    from + (to - from) * amount
+  }
+
+  private func easeInOut(_ amount: Double) -> Double {
+    let clamped = max(0, min(1, amount))
+    return clamped * clamped * (3 - 2 * clamped)
+  }
+
+  private func positiveRemainder(_ value: Double, _ divisor: Double) -> Double {
+    let remainder = value.truncatingRemainder(dividingBy: divisor)
+    return remainder < 0 ? remainder + divisor : remainder
   }
 
   private func startTripLiveActivity(_ snapshot: [String: Any]) {
@@ -443,6 +814,13 @@ public final class V3l0citySpeedEngineModule: Module {
     return fallback
   }
 
+  private func optionalStringValue(_ snapshot: [String: Any], _ key: String) -> String? {
+    if let value = snapshot[key] as? String, !value.isEmpty {
+      return value
+    }
+    return nil
+  }
+
   private func doubleValue(_ snapshot: [String: Any], _ key: String, fallback: Double) -> Double {
     if let value = snapshot[key] as? NSNumber {
       return value.doubleValue
@@ -454,6 +832,19 @@ public final class V3l0citySpeedEngineModule: Module {
       return Double(value)
     }
     return fallback
+  }
+
+  private func nullableDoubleValue(_ snapshot: [String: Any], _ key: String) -> Double? {
+    if let value = snapshot[key] as? NSNumber {
+      return value.doubleValue
+    }
+    if let value = snapshot[key] as? Double {
+      return value
+    }
+    if let value = snapshot[key] as? Int {
+      return Double(value)
+    }
+    return nil
   }
 
   private func boolValue(_ snapshot: [String: Any], _ key: String, fallback: Bool) -> Bool {

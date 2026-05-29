@@ -36,7 +36,9 @@ struct V3l0cityDriveProvider: TimelineProvider {
       distanceMeters: 0,
       distanceText: "0.0 mi",
       averageSpeedMps: 0,
+      averageSpeedText: "0",
       maxSpeedMps: 0,
+      maxSpeedText: "0",
       elapsedMs: 0,
       elapsedText: "00:00:00",
       headingDegrees: nil,
@@ -47,7 +49,8 @@ struct V3l0cityDriveProvider: TimelineProvider {
       signalText: "Ready",
       stale: false,
       permissionStatus: "ready",
-      updatedAtMs: Date().timeIntervalSince1970 * 1000.0
+      updatedAtMs: Date().timeIntervalSince1970 * 1000.0,
+      simulationActive: false
     )
   }
 }
@@ -62,7 +65,7 @@ struct V3l0cityDriveWidget: Widget {
     }
     .configurationDisplayName("V3l0city")
     .description("Glance at your current speed and active trip.")
-    .supportedFamilies([.systemSmall, .systemMedium])
+    .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
   }
 }
 
@@ -78,48 +81,176 @@ extension View {
 }
 
 struct V3l0cityDriveWidgetView: View {
+  @Environment(\.widgetFamily) private var family
   let snapshot: V3l0cityDriveSurfaceSnapshot?
 
   var body: some View {
     let usableSnapshot = snapshot
     let isStale = usableSnapshot == nil
 
+    switch family {
+    case .systemLarge:
+      largeView(usableSnapshot, isStale: isStale)
+    case .systemMedium:
+      mediumView(usableSnapshot, isStale: isStale)
+    default:
+      smallView(usableSnapshot, isStale: isStale)
+    }
+  }
+
+  private func smallView(_ snapshot: V3l0cityDriveSurfaceSnapshot?, isStale: Bool) -> some View {
     VStack(alignment: .leading, spacing: 8) {
-      HStack {
-        Text("V3l0city")
-          .font(.system(size: 13, weight: .semibold, design: .rounded))
-          .foregroundStyle(Color.white.opacity(0.9))
-        Spacer()
-        Circle()
-          .fill(isStale ? Color.yellow : signalColor(usableSnapshot?.signalQuality))
-          .frame(width: 8, height: 8)
-      }
+      header(snapshot, isStale: isStale)
 
       Spacer(minLength: 2)
 
       HStack(alignment: .firstTextBaseline, spacing: 5) {
-        Text(usableSnapshot?.speedText ?? "--")
+        Text(snapshot?.speedText ?? "--")
           .font(.system(size: 44, weight: .semibold, design: .rounded))
           .monospacedDigit()
           .foregroundStyle(Color.white)
           .lineLimit(1)
           .minimumScaleFactor(0.55)
-        Text(usableSnapshot?.units ?? "")
+        Text(snapshot?.units ?? "")
           .font(.system(size: 13, weight: .medium, design: .rounded))
           .foregroundStyle(Color.white.opacity(0.58))
       }
 
       HStack(spacing: 10) {
-        metric(label: "DIST", value: usableSnapshot?.distanceText ?? "--")
-        metric(label: "TIME", value: usableSnapshot?.elapsedText ?? "--")
+        metric(label: "DIST", value: snapshot?.distanceText ?? "--")
+        metric(label: "TIME", value: snapshot?.elapsedText ?? "--")
       }
 
-      Text(isStale ? "Open app to start" : (usableSnapshot?.signalText ?? "Ready"))
+      Text(widgetStatus(snapshot, isStale: isStale))
         .font(.system(size: 11, weight: .medium, design: .rounded))
         .foregroundStyle(isStale ? Color.yellow : Color(red: 0.0, green: 0.9, blue: 1.0))
         .lineLimit(1)
     }
     .padding(14)
+  }
+
+  private func mediumView(_ snapshot: V3l0cityDriveSurfaceSnapshot?, isStale: Bool) -> some View {
+    HStack(spacing: 16) {
+      VStack(alignment: .leading, spacing: 8) {
+        header(snapshot, isStale: isStale)
+        Spacer(minLength: 0)
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+          Text(snapshot?.speedText ?? "--")
+            .font(.system(size: 50, weight: .semibold, design: .rounded))
+            .monospacedDigit()
+            .foregroundStyle(Color.white)
+            .minimumScaleFactor(0.55)
+          Text(snapshot?.units ?? "")
+            .font(.system(size: 13, weight: .medium, design: .rounded))
+            .foregroundStyle(Color.white.opacity(0.58))
+        }
+        HStack(spacing: 14) {
+          metric(label: "DIST", value: snapshot?.distanceText ?? "--")
+          metric(label: "MAX", value: "\(snapshot?.maxSpeedText ?? "--") \(snapshot?.units ?? "")")
+        }
+      }
+      Spacer()
+      compass(snapshot?.headingDegrees, headingText: snapshot?.headingText ?? "--", size: 72, dimmed: isStale)
+    }
+    .padding(14)
+  }
+
+  private func largeView(_ snapshot: V3l0cityDriveSurfaceSnapshot?, isStale: Bool) -> some View {
+    VStack(spacing: 14) {
+      header(snapshot, isStale: isStale)
+      speedDial(snapshot, isStale: isStale)
+      HStack(spacing: 14) {
+        metric(label: "AVG", value: "\(snapshot?.averageSpeedText ?? "--") \(snapshot?.units ?? "")")
+        metric(label: "MAX", value: "\(snapshot?.maxSpeedText ?? "--") \(snapshot?.units ?? "")")
+        metric(label: "DIST", value: snapshot?.distanceText ?? "--")
+      }
+      HStack {
+        compass(snapshot?.headingDegrees, headingText: snapshot?.headingText ?? "--", size: 82, dimmed: isStale)
+        VStack(alignment: .leading, spacing: 4) {
+          metric(label: "TIME", value: snapshot?.elapsedText ?? "--")
+          Text(widgetStatus(snapshot, isStale: isStale))
+            .font(.system(size: 12, weight: .semibold, design: .rounded))
+            .foregroundStyle(isStale ? Color.yellow : Color(red: 0.0, green: 0.9, blue: 1.0))
+            .lineLimit(2)
+        }
+        Spacer()
+      }
+    }
+    .padding(16)
+  }
+
+  private func header(_ snapshot: V3l0cityDriveSurfaceSnapshot?, isStale: Bool) -> some View {
+    HStack {
+      Text("V3l0city")
+        .font(.system(size: 13, weight: .semibold, design: .rounded))
+        .foregroundStyle(Color.white.opacity(0.9))
+      Spacer()
+      Circle()
+        .fill(isStale ? Color.yellow : signalColor(snapshot?.signalQuality))
+        .frame(width: 8, height: 8)
+    }
+  }
+
+  private func widgetStatus(_ snapshot: V3l0cityDriveSurfaceSnapshot?, isStale: Bool) -> String {
+    if isStale {
+      return "Open V3l0city to start tracking"
+    }
+    if snapshot?.tripActive == true {
+      return "Latest state • use Live Activity"
+    }
+    return snapshot?.signalText ?? "Ready"
+  }
+
+  private func speedDial(_ snapshot: V3l0cityDriveSurfaceSnapshot?, isStale: Bool) -> some View {
+    ZStack {
+      Circle()
+        .trim(from: 0.10, to: 0.90)
+        .stroke(Color.white.opacity(0.12), style: StrokeStyle(lineWidth: 8, lineCap: .round))
+        .rotationEffect(.degrees(90))
+      Circle()
+        .trim(from: 0.10, to: min(0.90, 0.10 + CGFloat((snapshot?.speedMps ?? 0) / 45.0) * 0.80))
+        .stroke(isStale ? Color.yellow : Color(red: 0.0, green: 0.9, blue: 1.0), style: StrokeStyle(lineWidth: 8, lineCap: .round))
+        .rotationEffect(.degrees(90))
+      VStack(spacing: 0) {
+        Text(snapshot?.speedText ?? "--")
+          .font(.system(size: 54, weight: .semibold, design: .rounded))
+          .monospacedDigit()
+          .foregroundStyle(Color.white)
+          .minimumScaleFactor(0.55)
+        Text(snapshot?.units ?? "")
+          .font(.system(size: 13, weight: .medium, design: .rounded))
+          .foregroundStyle(Color.white.opacity(0.55))
+      }
+    }
+    .frame(height: 138)
+  }
+
+  private func compass(_ heading: Double?, headingText: String, size: CGFloat, dimmed: Bool) -> some View {
+    ZStack {
+      Circle()
+        .stroke(Color.white.opacity(dimmed ? 0.08 : 0.16), lineWidth: 1)
+      ForEach(0..<24) { tick in
+        Rectangle()
+          .fill(Color.white.opacity(tick % 6 == 0 ? 0.45 : 0.18))
+          .frame(width: 1, height: tick % 6 == 0 ? 8 : 4)
+          .offset(y: -size / 2 + 7)
+          .rotationEffect(.degrees(Double(tick) * 15.0 - (heading ?? 0)))
+      }
+      Image(systemName: "location.north.fill")
+        .font(.system(size: size * 0.34, weight: .bold))
+        .foregroundStyle(dimmed ? Color.white.opacity(0.35) : Color(red: 0.0, green: 0.9, blue: 1.0))
+      VStack {
+        Text("N")
+          .font(.system(size: 10, weight: .bold, design: .rounded))
+          .foregroundStyle(Color.red)
+        Spacer()
+      }
+      Text(headingText)
+        .font(.system(size: 10, weight: .semibold, design: .rounded))
+        .foregroundStyle(Color.white.opacity(0.65))
+        .offset(y: size / 2 + 8)
+    }
+    .frame(width: size, height: size)
   }
 
   private func metric(label: String, value: String) -> some View {

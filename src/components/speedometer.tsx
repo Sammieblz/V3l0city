@@ -4,6 +4,7 @@ import {
   AppState,
   BackHandler,
   Easing,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -65,11 +66,9 @@ import {
   saveTrip,
 } from '../database/tripRepository';
 import {
-  clearDriveSurfaceSnapshot,
-  endTripLiveActivity,
-  startTripLiveActivity,
-  updateTripLiveActivity,
-  writeDriveSurfaceSnapshot,
+  startLiveDriveSession,
+  stopLiveDriveSession,
+  updateLiveDriveSession,
 } from '../driveSurface/driveSurfaceStore';
 import { buildDriveSurfaceSnapshot } from '../driveSurface/snapshot';
 import type { Trip, TripSpeedSample } from '../domain/trip';
@@ -101,7 +100,7 @@ const MOUNT_OPTIONS = [
 ] as const;
 
 const TRIP_SPEED_SAMPLE_INTERVAL_MS = 500;
-const DRIVE_SURFACE_UPDATE_INTERVAL_MS = 500;
+const DRIVE_SURFACE_UPDATE_INTERVAL_MS = 1000;
 const SIMULATED_DRIVE_ENABLED_BY_ENV =
   process.env.EXPO_PUBLIC_V3L0CITY_SIMULATED_DRIVE === '1';
 const HEADER_HEIGHT = 56;
@@ -232,7 +231,7 @@ export default function Speedometer() {
   const currentTripBaseDistanceMeters = useRef(0);
   const currentTripBaseMaxSpeedMps = useRef(0);
   const lastDriveSurfaceWriteAt = useRef(0);
-  const liveActivityActive = useRef(false);
+  const liveDriveSessionActive = useRef(false);
 
   useEffect(() => {
     if (isTripActive) {
@@ -351,6 +350,7 @@ export default function Speedometer() {
         averageSpeedMps: effectiveAverageSpeedMps,
         maxSpeedMps: effectiveMaxSpeedMps,
         elapsedMs,
+        simulationActive: __DEV__ && simulationEnabled,
       }),
     [
       elapsedMs,
@@ -359,6 +359,7 @@ export default function Speedometer() {
       effectiveMaxSpeedMps,
       isTripActive,
       isTripPaused,
+      simulationEnabled,
       state,
       units,
     ],
@@ -638,6 +639,7 @@ export default function Speedometer() {
     setIsTripActive(true);
     setIsTripPaused(false);
     setCurrentTripStart(start);
+    liveDriveSessionActive.current = false;
     void tripTelemetryService.startTrip(draftTrip);
   };
 
@@ -666,6 +668,15 @@ export default function Speedometer() {
     const samples = currentTripSamples.current;
 
     await saveTrip(trip, samples);
+    await stopLiveDriveSession({
+      ...driveSurfaceSnapshot,
+      tripActive: false,
+      tripPaused: false,
+      stale: true,
+      signalText: 'Trip saved',
+      updatedAtMs: Date.now(),
+    });
+    liveDriveSessionActive.current = false;
     void syncSavedTripIfAllowed();
     void tripTelemetryService.completeTrip(trip);
     const stored = await getTrips();
@@ -684,6 +695,7 @@ export default function Speedometer() {
   }, [
     currentTripStart,
     distanceMeters,
+    driveSurfaceSnapshot,
     isTripActive,
     maxSpeedMps,
     mountLabel,
@@ -1060,21 +1072,21 @@ export default function Speedometer() {
 
     const publish = async () => {
       try {
-        await writeDriveSurfaceSnapshot(driveSurfaceSnapshot);
-
         if (driveSurfaceSnapshot.tripActive && !driveSurfaceSnapshot.tripPaused) {
-          if (liveActivityActive.current) {
-            await updateTripLiveActivity(driveSurfaceSnapshot);
+          if (liveDriveSessionActive.current) {
+            await updateLiveDriveSession(driveSurfaceSnapshot);
           } else {
-            await startTripLiveActivity(driveSurfaceSnapshot);
-            liveActivityActive.current = true;
+            await startLiveDriveSession(driveSurfaceSnapshot);
+            liveDriveSessionActive.current = true;
           }
           return;
         }
 
-        if (liveActivityActive.current) {
-          await endTripLiveActivity(driveSurfaceSnapshot);
-          liveActivityActive.current = false;
+        if (liveDriveSessionActive.current) {
+          await stopLiveDriveSession(driveSurfaceSnapshot);
+          liveDriveSessionActive.current = false;
+        } else {
+          await updateLiveDriveSession(driveSurfaceSnapshot);
         }
       } catch (error) {
         logAppWarning('drive-surface', error);
@@ -1084,36 +1096,25 @@ export default function Speedometer() {
     void publish();
   }, [driveSurfaceSnapshot]);
 
-  useEffect(
-    () => () => {
-      void clearDriveSurfaceSnapshot();
-    },
-    [],
-  );
-
   useEffect(() => {
-    const subscription = AppState.addEventListener('change', async (nextState) => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
       const prevState = appState.current;
       appState.current = nextState;
       if (
         prevState === 'active' &&
         (nextState === 'background' || nextState === 'inactive') &&
-        isTripActive &&
-        (autoStart || autoSave)
+        isTripActive
       ) {
-        try {
-          await stopAndSaveTrip();
-          showToast('Trip auto-saved', 'success');
-        } catch {
-          // Keep local state untouched if autosave cannot complete.
-        }
+        // Active trips now belong to the native live session while the app is
+        // backgrounded. Crash recovery finalizes drafts later if needed.
+        return;
       }
     });
 
     return () => {
       subscription.remove();
     };
-  }, [autoStart, autoSave, isTripActive, showToast, stopAndSaveTrip]);
+  }, [isTripActive]);
 
   useEffect(() => {
     if (prevStatus.current === status) {
@@ -1449,18 +1450,29 @@ export default function Speedometer() {
         </View>
 
         <View style={styles.settingsRow}>
-          <Text style={styles.settingsLabel}>Autosave on exit</Text>
-          <SegmentedButtons
-            value={autoSave ? 'on' : 'off'}
-            onValueChange={(value) => setAutoSave(value === 'on')}
-            buttons={[
-              { value: 'off', label: 'Off' },
-              { value: 'on', label: 'On' },
-            ]}
-          />
+          <Text style={styles.settingsLabel}>Trip recovery</Text>
           <Text style={styles.settingsHelper}>
-            When enabled, active trips are saved automatically when the app goes
-            to background.
+            Active trips keep live widget tracking in the background. Unfinished
+            drafts are recovered when V3l0city opens again.
+          </Text>
+        </View>
+
+        <View style={styles.settingsRow}>
+          <Text style={styles.settingsLabel}>Live widgets</Text>
+          <Button
+            mode="contained-tonal"
+            icon="cellphone-cog"
+            compact
+            onPress={() => void Linking.openSettings()}
+            style={styles.notificationButton}
+          >
+            Open app permissions
+          </Button>
+          <Text style={styles.settingsHelper}>
+            Live surfaces need location access. iPhone uses Live Activities for
+            true live speed; home-screen widgets show the latest state. Android
+            keeps a quiet active-trip notification running so widgets can keep
+            updating.
           </Text>
         </View>
 
