@@ -3,7 +3,7 @@ export type PrivacyPolicySection = {
   body: string[];
 };
 
-export const PRIVACY_POLICY_UPDATED_AT = 'May 27, 2026';
+export const PRIVACY_POLICY_UPDATED_AT = 'May 28, 2026';
 
 export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
   {
@@ -17,8 +17,9 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
     title: 'Permissions',
     body: [
       'Precise location while the app is open is needed to show accurate speed, distance, and direction. Approximate location is not accurate enough for a speedometer.',
+      'If you use live widgets or Live Activities during an active trip, your phone may ask for background location. This lets V3l0city keep the trip running after the screen locks or you leave the app.',
       'Motion access may be used to keep speed and direction smoother between location updates. On iPhone, your phone may ask for this permission.',
-      'Notifications are optional. They are used for trip-saved alerts and optional account features.',
+      'Notifications are optional for trip-saved alerts and account features. On Android, an active-trip notification is also used to keep live widget tracking running.',
       'Internet access is optional for local use. It is used only when you turn on online backup, friends, leaderboards, or troubleshooting.',
     ],
   },
@@ -38,6 +39,7 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
       'If you turn on nearby discovery, V3l0city sends only a general nearby area. It does not use your exact route or exact location for friend discovery.',
       'If you turn on leaderboards, V3l0city shares ranking totals such as distance, max speed, and trip count. Other users cannot see your detailed trips.',
       'If troubleshooting data sharing is enabled in this build, active-trip speed readings may be sent to help improve or fix the app. The speedometer still works without this.',
+      'Live widget tracking does not send extra data online by itself. It reads the same active-trip data already being stored on your phone unless online backup is turned on.',
     ],
   },
   {
@@ -45,7 +47,7 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
     body: [
       'V3l0city does not share exact trip routes with friends, nearby users, or leaderboards.',
       'V3l0city does not upload your contacts for friend discovery.',
-      'V3l0city is designed for use while the app is open. It does not add background trip sharing for friends or leaderboards.',
+      'Background tracking is only for a trip you start. V3l0city does not run always-on location tracking after the trip is saved.',
     ],
   },
   {

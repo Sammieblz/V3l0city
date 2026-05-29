@@ -263,16 +263,17 @@ User selects JSON or CSV
   -> open platform share sheet
 ```
 
-## Foreground-Only Constraint
+## Active-Trip Background Constraint
 
-The native speed engine stops collectors when the app enters the background.
-Background route tracking is not implemented. `autoSave` saves an active trip on
-background transition, but it does not continue recording in the background.
+The native speed engine is foreground-first until the user starts a trip. During
+a user-started active trip, the live drive session keeps native collectors
+running for widgets, Live Activities, and the Android foreground-service
+notification until the trip is stopped/saved.
 
-Any future background tracking work should be treated as a major architecture
-change. It would require explicit platform permissions, foreground service
-handling on Android, background location modes on iOS, battery policy decisions,
-and new user-facing privacy copy.
+This is not passive always-on tracking. Widgets do not start GPS by themselves;
+they display the active trip owned by the app/native live session. Any expansion
+beyond active-trip live surfaces should still be treated as a major architecture
+change with new privacy, battery, and store-review decisions.
 
 ## Accuracy Philosophy
 

@@ -58,9 +58,12 @@ describe('drive surface snapshots', () => {
       speedText: '22',
       units: 'MPH',
       distanceText: '1.0 mi',
+      averageSpeedText: '18',
+      maxSpeedText: '31',
       elapsedText: '01:02:03',
       headingText: '91°',
       signalText: 'Good',
+      simulationActive: false,
     });
   });
 
@@ -75,8 +78,11 @@ describe('drive surface snapshots', () => {
       averageSpeedMps: 0,
       maxSpeedMps: 0,
       elapsedMs: 0,
+      simulationActive: true,
       nowMs: 10_000,
     });
+
+    expect(snapshot.simulationActive).toBe(true);
 
     expect(parseDriveSurfaceSnapshot(serializeDriveSurfaceSnapshot(snapshot))).toEqual(
       snapshot,

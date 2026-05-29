@@ -61,6 +61,34 @@ async function clearDriveSurfaceSnapshot() {
   await nativeModule.clearDriveSurfaceSnapshot();
 }
 
+async function startLiveDriveSession(snapshot) {
+  if (!nativeModule?.startLiveDriveSession) {
+    return;
+  }
+  await nativeModule.startLiveDriveSession(snapshot);
+}
+
+async function updateLiveDriveSession(snapshot) {
+  if (!nativeModule?.updateLiveDriveSession) {
+    return;
+  }
+  await nativeModule.updateLiveDriveSession(snapshot);
+}
+
+async function stopLiveDriveSession(snapshot) {
+  if (!nativeModule?.stopLiveDriveSession) {
+    return;
+  }
+  await nativeModule.stopLiveDriveSession(snapshot);
+}
+
+async function getLiveDriveSessionStatus() {
+  if (!nativeModule?.getLiveDriveSessionStatus) {
+    return { active: false, collectorsActive: false };
+  }
+  return nativeModule.getLiveDriveSessionStatus();
+}
+
 async function startTripLiveActivity(snapshot) {
   if (!nativeModule?.startTripLiveActivity) {
     return;
@@ -99,6 +127,10 @@ module.exports = {
   setMountOffsetDegrees,
   writeDriveSurfaceSnapshot,
   clearDriveSurfaceSnapshot,
+  startLiveDriveSession,
+  updateLiveDriveSession,
+  stopLiveDriveSession,
+  getLiveDriveSessionStatus,
   startTripLiveActivity,
   updateTripLiveActivity,
   endTripLiveActivity,

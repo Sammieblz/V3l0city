@@ -18,7 +18,9 @@ struct V3l0cityDriveSurfaceSnapshot: Codable, Hashable {
   let distanceMeters: Double
   let distanceText: String
   let averageSpeedMps: Double
+  let averageSpeedText: String?
   let maxSpeedMps: Double
+  let maxSpeedText: String?
   let elapsedMs: Double
   let elapsedText: String
   let headingDegrees: Double?
@@ -30,6 +32,7 @@ struct V3l0cityDriveSurfaceSnapshot: Codable, Hashable {
   let stale: Bool
   let permissionStatus: String
   let updatedAtMs: Double
+  let simulationActive: Bool?
 }
 
 func v3l0cityDriveSurfaceDefaults() -> UserDefaults {

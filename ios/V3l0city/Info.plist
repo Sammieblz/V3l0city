@@ -46,9 +46,9 @@
       <true/>
     </dict>
     <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-    <string>V3l0city uses precise location to calculate speed, distance, vehicle direction, and trip history during active trips.</string>
+    <string>V3l0city uses precise location during active trips to calculate speed, distance, vehicle direction, and live widgets or Live Activities after the screen locks.</string>
     <key>NSLocationAlwaysUsageDescription</key>
-    <string>V3l0city uses precise location to calculate speed, distance, vehicle direction, and trip history during active trips.</string>
+    <string>V3l0city uses precise location during active trips to keep speed, distance, vehicle direction, and live widgets working after the screen locks.</string>
     <key>NSLocationTemporaryUsageDescriptionDictionary</key>
     <dict>
       <key>V3l0cityPreciseLocation</key>
@@ -58,6 +58,10 @@
     <string>V3l0city uses precise location while the app is open to calculate speed, distance, and vehicle direction.</string>
     <key>NSMotionUsageDescription</key>
     <string>V3l0city uses motion sensors to smooth speed changes and provide compass fallback when GPS course is unavailable.</string>
+    <key>UIBackgroundModes</key>
+    <array>
+      <string>location</string>
+    </array>
     <key>NSUserActivityTypes</key>
     <array>
       <string>$(PRODUCT_BUNDLE_IDENTIFIER).expo.index_route</string>

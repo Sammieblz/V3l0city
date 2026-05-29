@@ -54,7 +54,9 @@ export type DriveSurfaceSnapshot = {
   distanceMeters: number;
   distanceText: string;
   averageSpeedMps: number;
+  averageSpeedText: string;
   maxSpeedMps: number;
+  maxSpeedText: string;
   elapsedMs: number;
   elapsedText: string;
   headingDegrees: number | null;
@@ -66,6 +68,7 @@ export type DriveSurfaceSnapshot = {
   stale: boolean;
   permissionStatus: string;
   updatedAtMs: number;
+  simulationActive: boolean;
 };
 
 export function isAvailable(): boolean;
@@ -76,6 +79,15 @@ export function setTripAccumulation(active: boolean): Promise<void>;
 export function setMountOffsetDegrees(value: number): Promise<void>;
 export function writeDriveSurfaceSnapshot(snapshot: DriveSurfaceSnapshot): Promise<void>;
 export function clearDriveSurfaceSnapshot(): Promise<void>;
+export function startLiveDriveSession(snapshot: DriveSurfaceSnapshot): Promise<void>;
+export function updateLiveDriveSession(snapshot: DriveSurfaceSnapshot): Promise<void>;
+export function stopLiveDriveSession(snapshot: DriveSurfaceSnapshot): Promise<void>;
+export function getLiveDriveSessionStatus(): Promise<{
+  active: boolean;
+  collectorsActive: boolean;
+  dashboardActive?: boolean;
+  listenerCount?: number;
+}>;
 export function startTripLiveActivity(snapshot: DriveSurfaceSnapshot): Promise<void>;
 export function updateTripLiveActivity(snapshot: DriveSurfaceSnapshot): Promise<void>;
 export function endTripLiveActivity(snapshot: DriveSurfaceSnapshot): Promise<void>;

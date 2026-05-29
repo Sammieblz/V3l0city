@@ -351,15 +351,26 @@ Expo Go is not the intended runtime for V3l0city notifications.
 
 V3l0city can show a small speed/trip glance outside the main app:
 
-- iPhone widgets and Live Activities show your latest active-trip speed,
-  distance, elapsed time, and signal status.
-- Android home-screen widgets show the same active-trip snapshot.
+- iPhone Live Activities are the real-time surface for active-trip speed,
+  distance, max speed, elapsed time, compass heading, and signal status.
+- iPhone home-screen widgets show the latest active-trip state, but iOS may
+  pause widget refreshes. If you need live speed with the phone locked or in
+  CarPlay, use the Live Activity.
+- Android home-screen widgets show the same active-trip information and resize
+  between compact and expanded layouts while the active-trip notification is
+  running.
 - Android can also show a quiet active-trip notification while a trip is
   running, if notifications are allowed.
 
-Widgets do not measure speed by themselves. Keep V3l0city open while driving so
-the speed engine can update them. If the app stops updating, widgets show an
-open-app message instead of old speed.
+Widgets do not start GPS by themselves. Start a trip in V3l0city first; during
+that active trip, the native speed engine updates the live widgets. If tracking
+stops or the latest update is too old, widgets show an open-app message instead
+of old speed.
+
+On iPhone, live screen-off updates may ask for location permission that allows
+active-trip tracking in the background. On Android, live widgets need precise
+location and the active-trip notification; some devices may also ask for
+background location so tracking can continue when V3l0city is not visible.
 
 CarPlay support starts through iPhone widgets and Live Activities. Full CarPlay
 and Android Auto dashboards depend on Apple and Google car-app rules and are not
@@ -439,7 +450,9 @@ Distance history is saved only while a trip is active and not paused.
 
 ### Trip did not save
 
-Use **Stop & Save** before closing the app, or enable **Autosave on exit**.
+Use **Stop & Save** before closing the app. If the app closes unexpectedly,
+V3l0city keeps a local draft and tries to recover it the next time you open the
+app.
 
 ### Heading looks rotated
 
