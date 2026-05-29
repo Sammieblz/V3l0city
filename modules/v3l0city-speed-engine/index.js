@@ -47,6 +47,41 @@ async function setMountOffsetDegrees(value) {
   await nativeModule.setMountOffsetDegrees(Number(value) || 0);
 }
 
+async function writeDriveSurfaceSnapshot(snapshot) {
+  if (!nativeModule?.writeDriveSurfaceSnapshot) {
+    return;
+  }
+  await nativeModule.writeDriveSurfaceSnapshot(snapshot);
+}
+
+async function clearDriveSurfaceSnapshot() {
+  if (!nativeModule?.clearDriveSurfaceSnapshot) {
+    return;
+  }
+  await nativeModule.clearDriveSurfaceSnapshot();
+}
+
+async function startTripLiveActivity(snapshot) {
+  if (!nativeModule?.startTripLiveActivity) {
+    return;
+  }
+  await nativeModule.startTripLiveActivity(snapshot);
+}
+
+async function updateTripLiveActivity(snapshot) {
+  if (!nativeModule?.updateTripLiveActivity) {
+    return;
+  }
+  await nativeModule.updateTripLiveActivity(snapshot);
+}
+
+async function endTripLiveActivity(snapshot) {
+  if (!nativeModule?.endTripLiveActivity) {
+    return;
+  }
+  await nativeModule.endTripLiveActivity(snapshot);
+}
+
 function addSpeedUpdateListener(listener) {
   return nativeModule?.addListener?.('speedUpdate', listener) ?? { remove() {} };
 }
@@ -62,6 +97,11 @@ module.exports = {
   reset,
   setTripAccumulation,
   setMountOffsetDegrees,
+  writeDriveSurfaceSnapshot,
+  clearDriveSurfaceSnapshot,
+  startTripLiveActivity,
+  updateTripLiveActivity,
+  endTripLiveActivity,
   addSpeedUpdateListener,
   addSpeedErrorListener,
 };

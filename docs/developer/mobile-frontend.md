@@ -28,6 +28,7 @@ hooks, API clients, or database modules as route files.
 
 It owns:
 
+- First-install onboarding visibility.
 - Unit selection.
 - Mount position.
 - Auto-start.
@@ -115,6 +116,9 @@ Important components:
 - `AverageSpeedDisplay.tsx`: average speed stat block.
 - `HorizontalCompass.tsx`: horizontal heading strip.
 - `MiniCompass.tsx`: compact circular compass.
+- `OnboardingScreen.tsx`: one-time local install choice between sign-up,
+  sign-in, and offline use.
+- `PrivacyPolicyScreen.tsx`: in-app permissions and data policy.
 - `TripHistory.tsx`: saved trip list and clear-all action.
 - `DebugOverlay.tsx`: development-only sensor diagnostics overlay.
 - `CustomStatusBar.tsx`: status bar helper.
@@ -287,6 +291,11 @@ The preferences repository writes to the single-row `preferences` SQLite table.
 The drawer menu opens:
 
 - History.
+- Insights.
+- Leaderboards.
+- Find Friends.
+- Account / Sync.
+- Privacy.
 - Settings.
 - Export as JSON.
 - Export as CSV.
@@ -300,6 +309,39 @@ Export handlers call:
 - `exportAsCsv()`
 
 Both functions read local SQLite data and then open the platform share sheet.
+
+## Account, Sync, and Social Screens
+
+Cloud/social screens are internal dashboard screens, not Expo Router routes.
+They are opened from the drawer and render inside `speedometer.tsx`.
+
+Primary components:
+
+- `AccountSyncScreen`
+- `FindFriendsScreen`
+- `LeaderboardsScreen`
+
+They consume the provider-neutral cloud API from `src/cloud`. If Supabase env
+vars are missing or the user is signed out, these screens show offline/auth
+states. The dashboard, history, insights, and export flows continue to use local
+SQLite only.
+
+`AccountSyncScreen` handles separate auth screens, first-time signed-up
+onboarding, account preference edits, coarse nearby permission, sync now,
+restore, and sign-out. Sign-up collects name, username, email, and password
+before email confirmation. Signed-in onboarding is driven by
+`profiles.onboarding_completed_at`; after that value exists, the screen becomes
+normal profile/sync settings.
+
+First-install onboarding is separate. `src/onboarding/onboardingStorage.ts`
+stores a local AsyncStorage flag, so anonymous/offline users see onboarding
+once per install without creating an account. Resetting app data or
+reinstalling the app resets this local onboarding state.
+
+`FindFriendsScreen` handles username search, coarse nearby discovery, and
+suggestions. `LeaderboardsScreen` shows aggregate-only ranking data.
+`PrivacyPolicyScreen` is reachable from onboarding, Account / Sync, and the
+drawer.
 
 ## Notifications
 
@@ -346,4 +388,6 @@ Signal footer displays quality and source.
 - Keep speed-source details inside `useVelocitySensors`.
 - Keep visual-only logic inside child components.
 - Avoid making telemetry part of render-critical UI state. It is a sidecar.
+- Avoid making cloud sync part of render-critical UI state. It is optional and
+  local data wins.
 - Do not add files under `app/` unless they are actual Expo Router routes.

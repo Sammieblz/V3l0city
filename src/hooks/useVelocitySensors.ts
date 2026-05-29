@@ -38,6 +38,10 @@ import {
   shouldUseGpsSample,
 } from '../utils/sensorGuards';
 import { logSensorWarning } from '../utils/logging';
+import {
+  getNativeSpeedErrorMessage,
+  getUserFacingErrorMessage,
+} from '../utils/userFacingErrors';
 
 type PermissionState =
   | 'unknown'
@@ -497,7 +501,7 @@ export const useVelocitySensors = ({
             ? 'sensor_unavailable'
             : 'error';
       setStatus(nextStatus);
-      setErrorMessage(event.message);
+      setErrorMessage(getNativeSpeedErrorMessage(event.code));
       if (event.code === 'permission_denied') {
         setPermission('denied');
       } else if (event.code === 'precise_location_required') {
@@ -840,9 +844,12 @@ export const useVelocitySensors = ({
           return;
         }
         setStatus('error');
-        setErrorMessage(
-          error instanceof Error ? error.message : 'Unexpected sensor error'
+        logSensorWarning(
+          `JS sensor pipeline error: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
         );
+        setErrorMessage(getUserFacingErrorMessage(error, 'sensor'));
       }
     };
 

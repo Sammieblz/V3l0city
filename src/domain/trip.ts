@@ -3,6 +3,8 @@ import type { Units } from '../utils/speedMath';
 export type TripSpeedSource = 'none' | 'gps' | 'blended' | 'motion-only';
 export type TripSignalQuality = 'good' | 'medium' | 'poor';
 export type TripHeadingSource = 'none' | 'course' | 'device';
+export type TripRecordStatus = 'draft' | 'completed';
+export type TripSyncStatus = 'local' | 'pending' | 'synced' | 'error';
 
 export type Trip = {
   id: string;
@@ -13,6 +15,12 @@ export type Trip = {
   averageSpeedMps: number;
   units: Units;
   mountLabel?: string;
+  recordStatus?: TripRecordStatus;
+  localUpdatedAt?: string;
+  deletedAt?: string | null;
+  cloudSyncedAt?: string | null;
+  cloudSyncError?: string | null;
+  syncStatus?: TripSyncStatus;
 };
 
 export type TripSpeedSample = {

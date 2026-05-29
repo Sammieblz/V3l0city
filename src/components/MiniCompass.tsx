@@ -7,7 +7,7 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
 } from 'react-native-reanimated';
-import { colors, motion } from '../theme/paperTheme';
+import { colors, fontFamilies, motion } from '../theme/paperTheme';
 import {
   isUsableHeading,
   normalizeHeading,
@@ -112,6 +112,7 @@ const MiniCompass: React.FC<MiniCompassProps> = ({
         x={pos.x}
         y={pos.y + size * 0.033}
         fill={label === 'N' ? colors.north : colors.textSecondary}
+        fontFamily={fontFamilies.display}
         fontSize={Math.max(8, size * 0.083)}
         fontWeight="700"
         textAnchor="middle"
@@ -235,6 +236,7 @@ const styles = StyleSheet.create({
   },
   readoutText: {
     color: colors.textSecondary,
+    fontFamily: fontFamilies.numeric,
     fontSize: 11,
     fontWeight: '700',
   },
@@ -243,6 +245,7 @@ const styles = StyleSheet.create({
   },
   sourceText: {
     color: colors.textMuted,
+    fontFamily: fontFamilies.bodyBold,
     fontSize: 8,
     fontWeight: '700',
     letterSpacing: 0,

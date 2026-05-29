@@ -88,5 +88,6 @@ describe('InsightsContent', () => {
     expect(renderer?.root.findByProps({ testID: 'insights-content' })).toBeTruthy();
     expect(renderer?.root.findAllByType(Text).some((node) => node.props.children === 'Average Speed')).toBe(true);
     expect(renderer?.root.findAllByType(Text).some((node) => node.props.children === 'Activity Heatmap')).toBe(true);
+    expect(renderer?.root.findAllByProps({ testID: 'responsive-bar-chart' }).length).toBeGreaterThanOrEqual(3);
   });
 });

@@ -122,6 +122,26 @@ class V3l0citySpeedEngineModule : Module(), SensorEventListener {
       }
     }
 
+    AsyncFunction("writeDriveSurfaceSnapshot") { snapshot: Map<String, Any?> ->
+      DriveSurfaceStore.write(context, snapshot)
+    }
+
+    AsyncFunction("clearDriveSurfaceSnapshot") {
+      DriveSurfaceStore.clear(context)
+    }
+
+    AsyncFunction("startTripLiveActivity") { _: Map<String, Any?> ->
+      // iOS-only. Android car-facing surfaces are the home-screen widget and active-trip notification.
+    }
+
+    AsyncFunction("updateTripLiveActivity") { _: Map<String, Any?> ->
+      // iOS-only. Android car-facing surfaces are the home-screen widget and active-trip notification.
+    }
+
+    AsyncFunction("endTripLiveActivity") { _: Map<String, Any?> ->
+      // iOS-only. Android car-facing surfaces are the home-screen widget and active-trip notification.
+    }
+
     OnActivityEntersBackground {
       stopCollectors()
     }

@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  android:id="@+id/driveWidgetRoot"
+  android:layout_width="match_parent"
+  android:layout_height="match_parent"
+  android:background="@drawable/v3l0city_drive_widget_background"
+  android:gravity="center_vertical"
+  android:orientation="vertical"
+  android:padding="14dp">
+
+  <LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
+
+    <TextView
+      android:layout_width="0dp"
+      android:layout_height="wrap_content"
+      android:layout_weight="1"
+      android:ellipsize="end"
+      android:fontFamily="sans-serif-medium"
+      android:maxLines="1"
+      android:text="V3l0city"
+      android:textColor="#EAEFF2"
+      android:textSize="13sp" />
+
+    <TextView
+      android:id="@+id/driveWidgetSignalDot"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:text="●"
+      android:textColor="#00E5FF"
+      android:textSize="14sp" />
+  </LinearLayout>
+
+  <LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="0dp"
+    android:layout_weight="1"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
+
+    <TextView
+      android:id="@+id/driveWidgetSpeed"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:fontFamily="sans-serif-condensed"
+      android:includeFontPadding="false"
+      android:maxLines="1"
+      android:text="0"
+      android:textColor="#FFFFFF"
+      android:textSize="48sp" />
+
+    <TextView
+      android:id="@+id/driveWidgetUnits"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:layout_marginStart="5dp"
+      android:fontFamily="sans-serif-medium"
+      android:maxLines="1"
+      android:text="MPH"
+      android:textColor="#8A8F98"
+      android:textSize="13sp" />
+  </LinearLayout>
+
+  <LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal">
+
+    <TextView
+      android:id="@+id/driveWidgetDistance"
+      android:layout_width="0dp"
+      android:layout_height="wrap_content"
+      android:layout_weight="1"
+      android:ellipsize="end"
+      android:fontFamily="sans-serif-medium"
+      android:maxLines="1"
+      android:text="0.0 mi"
+      android:textColor="#EAEFF2"
+      android:textSize="13sp" />
+
+    <TextView
+      android:id="@+id/driveWidgetElapsed"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:fontFamily="sans-serif-medium"
+      android:maxLines="1"
+      android:text="00:00:00"
+      android:textColor="#EAEFF2"
+      android:textSize="13sp" />
+  </LinearLayout>
+
+  <TextView
+    android:id="@+id/driveWidgetStatus"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="6dp"
+    android:ellipsize="end"
+    android:fontFamily="sans-serif-medium"
+    android:maxLines="1"
+    android:text="Ready"
+    android:textColor="#00E5FF"
+    android:textSize="11sp" />
+</LinearLayout>

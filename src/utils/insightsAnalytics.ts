@@ -3,6 +3,7 @@ import type {
   TripSpeedSource,
   TripWithSpeedSamples,
 } from '../domain/trip';
+import { colors } from '../theme/paperTheme';
 import type { Units } from './speedMath';
 
 export type TripChartPoint = {
@@ -75,16 +76,16 @@ const SAMPLE_DURATION_FALLBACK_MS = 500;
 const MAX_SAMPLE_GAP_MS = 5000;
 
 const QUALITY_COLORS: Record<TripSignalQuality, string> = {
-  good: '#00E5FF',
-  medium: '#FFAA00',
-  poor: '#FF4C6B',
+  good: colors.accent,
+  medium: colors.brandGold,
+  poor: colors.danger,
 };
 
 const SOURCE_COLORS: Record<TripSpeedSource, string> = {
-  gps: '#00E5FF',
-  blended: '#35F2A4',
-  'motion-only': '#FFAA00',
-  none: '#585E68',
+  gps: colors.accent,
+  blended: colors.brandTeal,
+  'motion-only': colors.brandGold,
+  none: colors.textMuted,
 };
 
 export const displaySpeed = (speedMps: number, units: Units): number =>

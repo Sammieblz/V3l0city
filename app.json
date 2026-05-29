@@ -14,6 +14,7 @@
     },
     "notification": {
       "color": "#00E5FF",
+      "icon": "./assets/images/notification-icon.png",
       "iosDisplayInForeground": true,
       "androidMode": "default"
     },
@@ -28,7 +29,9 @@
         "NSLocationTemporaryUsageDescriptionDictionary": {
           "V3l0cityPreciseLocation": "V3l0city needs Precise Location to calculate accurate speed, distance, and vehicle direction."
         },
-        "NSMotionUsageDescription": "V3l0city uses motion sensors to smooth speed changes and provide compass fallback when GPS course is unavailable."
+        "NSMotionUsageDescription": "V3l0city uses motion sensors to smooth speed changes and provide compass fallback when GPS course is unavailable.",
+        "NSSupportsLiveActivities": true,
+        "NSSupportsLiveActivitiesFrequentUpdates": true
       }
     },
     "androidStatusBar": {
@@ -46,7 +49,7 @@
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#0F1114"
       },
       "package": "com.v3l0city.app"
     },
@@ -57,7 +60,20 @@
     },
     "plugins": [
       "expo-router",
-      "expo-font",
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/Barlow-Regular.ttf",
+            "./assets/fonts/Barlow-Medium.ttf",
+            "./assets/fonts/Barlow-SemiBold.ttf",
+            "./assets/fonts/Barlow-Bold.ttf",
+            "./assets/fonts/Rajdhani-Medium.ttf",
+            "./assets/fonts/Rajdhani-SemiBold.ttf",
+            "./assets/fonts/Rajdhani-Bold.ttf"
+          ]
+        }
+      ],
       [
         "expo-notifications",
         {
@@ -70,7 +86,8 @@
         {
           "backgroundColor": "#0F1114"
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true

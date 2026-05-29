@@ -1,6 +1,8 @@
 import {
   buildExportPayload,
   buildTripsCsv,
+  parseExportPayload,
+  previewImportPayload,
 } from '../src/database/exportFormat';
 import type { Trip, TripSpeedSample } from '../src/domain/trip';
 
@@ -67,6 +69,40 @@ describe('exportService trip speed samples', () => {
     expect(csv).toContain('Trip ID,Sequence,Recorded At,Elapsed (ms),Speed (m/s)');
     expect(csv).toContain(
       'trip-1,1,2026-05-19T12:00:01.000Z,1000,12.500,12.00,91.0,course,4.0,good,course-used,blended,good,0.950,native-speed-used,5.0,100,1,1,0,0,,'
+    );
+  });
+
+  it('validates and previews JSON imports', () => {
+    const payload = parseExportPayload(
+      buildExportPayload(
+        {
+          units: 'MPH',
+          mountIndex: 1,
+          autoStart: true,
+          autoSave: false,
+          orientationMode: 'auto',
+        },
+        [{ ...trip, speedSamples: [sample] }]
+      )
+    );
+
+    expect(previewImportPayload(payload)).toEqual({
+      tripsFound: 1,
+      samplesFound: 1,
+      preferencesFound: true,
+    });
+    expect(payload.trips[0]).toMatchObject({
+      id: 'trip-1',
+      speedSamples: [{ tripId: 'trip-1', sequence: 1 }],
+    });
+  });
+
+  it('rejects files that are not V3l0city JSON exports', () => {
+    expect(() => parseExportPayload({ trips: [] })).toThrow(
+      'No valid V3l0city trips were found in this file'
+    );
+    expect(() => parseExportPayload({ hello: 'world' })).toThrow(
+      'Choose a V3l0city JSON export file'
     );
   });
 });

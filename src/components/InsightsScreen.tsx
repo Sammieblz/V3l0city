@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   AccessibilityInfo,
   ActivityIndicator,
+  type LayoutChangeEvent,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -9,7 +10,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { BarChart, LineChart, PieChart } from 'react-native-gifted-charts';
+import { LineChart, PieChart } from 'react-native-gifted-charts';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -17,6 +18,14 @@ import Animated, {
   withDelay,
   withTiming,
 } from 'react-native-reanimated';
+import Svg, {
+  Defs,
+  LinearGradient,
+  Line,
+  Rect,
+  Stop,
+  Text as SvgText,
+} from 'react-native-svg';
 
 import { getRecentTripsWithSpeedSamples } from '../database/tripRepository';
 import type { HeatmapCell, TripChartPoint } from '../utils/insightsAnalytics';
@@ -28,7 +37,7 @@ import {
   distanceUnitLabel,
 } from '../utils/insightsAnalytics';
 import type { TripWithSpeedSamples } from '../domain/trip';
-import { colors, motion, radii, spacing } from '../theme/paperTheme';
+import { colors, fontFamilies, motion, radii, spacing } from '../theme/paperTheme';
 import type { Units } from '../utils/speedMath';
 
 type Props = {
@@ -73,20 +82,135 @@ const formatTripChip = (startedAt: string): string => {
 
 const heatmapColor = (intensity: number): string => {
   if (intensity <= 0) return colors.surfaceSoft;
-  if (intensity < 0.25) return 'rgba(0, 229, 255, 0.22)';
-  if (intensity < 0.5) return 'rgba(0, 229, 255, 0.42)';
-  if (intensity < 0.75) return 'rgba(0, 229, 255, 0.68)';
-  return colors.accent;
+  if (intensity < 0.25) return colors.brandTealDim;
+  if (intensity < 0.5) return colors.heatmapLow;
+  if (intensity < 0.75) return colors.heatmapMid;
+  if (intensity < 0.92) return colors.accent;
+  return colors.brandGold;
 };
 
-const toBarData = (points: TripChartPoint[]) =>
-  points.map((point) => ({
-    value: point.value,
-    label: point.label,
-    frontColor: colors.accent,
-    gradientColor: colors.accentMuted,
-    showGradient: true,
-  }));
+const sanitizeGradientId = (value: string) =>
+  value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 24);
+
+const ResponsiveBarChart: React.FC<{
+  data: TripChartPoint[];
+  chartWidth: number;
+  maxValue: number;
+  palette: { color: string; gradientColor: string };
+}> = ({ data, chartWidth, maxValue, palette }) => {
+  const [measuredWidth, setMeasuredWidth] = useState(0);
+  const width = Math.max(240, measuredWidth || chartWidth);
+  const yAxisWidth = 34;
+  const topPadding = 20;
+  const plotHeight = 126;
+  const bottomPadding = 34;
+  const height = topPadding + plotHeight + bottomPadding;
+  const minSlotWidth = 42;
+  const contentWidth = Math.max(width, yAxisWidth + data.length * minSlotWidth + 12);
+  const plotWidth = contentWidth - yAxisWidth - 10;
+  const slotWidth = data.length > 0 ? plotWidth / data.length : plotWidth;
+  const barWidth = Math.min(26, Math.max(12, slotWidth * 0.46));
+  const xAxisY = topPadding + plotHeight;
+  const gradientId = `barGradient${sanitizeGradientId(palette.color)}`;
+  const labelEvery = Math.max(1, Math.ceil(data.length / 8));
+  const topLabelEvery = Math.max(1, Math.ceil(data.length / 10));
+
+  const onLayout = (event: LayoutChangeEvent) => {
+    setMeasuredWidth(Math.round(event.nativeEvent.layout.width));
+  };
+
+  return (
+    <View
+      style={styles.responsiveChart}
+      onLayout={onLayout}
+      testID="responsive-bar-chart"
+    >
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ width: contentWidth }}
+      >
+        <Svg width={contentWidth} height={height}>
+          <Defs>
+            <LinearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor={palette.color} stopOpacity={0.98} />
+              <Stop offset="1" stopColor={palette.gradientColor} stopOpacity={0.5} />
+            </LinearGradient>
+          </Defs>
+          {[0, 1, 2, 3, 4].map((section) => {
+            const value = (maxValue / 4) * section;
+            const y = xAxisY - (value / maxValue) * plotHeight;
+            return (
+              <React.Fragment key={section}>
+                <Line
+                  x1={yAxisWidth}
+                  x2={contentWidth - 4}
+                  y1={y}
+                  y2={y}
+                  stroke={colors.border}
+                  strokeOpacity={section === 0 ? 1 : 0.55}
+                  strokeWidth={StyleSheet.hairlineWidth}
+                />
+                <SvgText
+                  x={0}
+                  y={y + 3}
+                  fill={colors.textMuted}
+                  fontFamily={fontFamilies.numeric}
+                  fontSize={9}
+                >
+                  {Math.round(value)}
+                </SvgText>
+              </React.Fragment>
+            );
+          })}
+          {data.map((point, index) => {
+            const barHeight = Math.max(2, (point.value / maxValue) * plotHeight);
+            const x = yAxisWidth + index * slotWidth + (slotWidth - barWidth) / 2;
+            const y = xAxisY - barHeight;
+            const showLabel = index % labelEvery === 0 || index === data.length - 1;
+            const showTopLabel = index % topLabelEvery === 0 || data.length <= 8;
+            return (
+              <React.Fragment key={`${point.tripId}-${index}`}>
+                <Rect
+                  x={x}
+                  y={y}
+                  width={barWidth}
+                  height={barHeight}
+                  rx={6}
+                  fill={`url(#${gradientId})`}
+                />
+                {showTopLabel && (
+                  <SvgText
+                    x={x + barWidth / 2}
+                    y={Math.max(9, y - 5)}
+                    fill={colors.textSecondary}
+                    fontFamily={fontFamilies.numeric}
+                    fontSize={9}
+                    textAnchor="middle"
+                  >
+                    {point.value}
+                  </SvgText>
+                )}
+                {showLabel && (
+                  <SvgText
+                    x={x + barWidth / 2}
+                    y={height - 9}
+                    fill={colors.textMuted}
+                    fontFamily={fontFamilies.numeric}
+                    fontSize={9}
+                    textAnchor="middle"
+                  >
+                    {point.label}
+                  </SvgText>
+                )}
+              </React.Fragment>
+            );
+          })}
+        </Svg>
+      </ScrollView>
+    </View>
+  );
+};
 
 const useReducedMotionPreference = () => {
   const [reducedMotion, setReducedMotion] = useState(false);
@@ -141,9 +265,18 @@ const SummaryCard: React.FC<{
   label: string;
   value: string;
   helper?: string;
-}> = ({ label, value, helper }) => (
+  tone?: 'default' | 'gold' | 'teal';
+}> = ({ label, value, helper, tone = 'default' }) => (
   <View style={styles.summaryCard}>
-    <Text style={styles.summaryValue}>{value}</Text>
+    <Text
+      style={[
+        styles.summaryValue,
+        tone === 'gold' && styles.summaryValueGold,
+        tone === 'teal' && styles.summaryValueTeal,
+      ]}
+    >
+      {value}
+    </Text>
     <Text style={styles.summaryLabel}>{label}</Text>
     {helper && <Text style={styles.summaryHelper}>{helper}</Text>}
   </View>
@@ -172,37 +305,23 @@ const EmptyChart: React.FC<{ message: string }> = ({ message }) => (
 const TripBarChart: React.FC<{
   data: TripChartPoint[];
   chartWidth: number;
-  suffix: string;
-}> = ({ data, chartWidth, suffix }) => {
+  palette?: { color: string; gradientColor: string };
+}> = ({
+  data,
+  chartWidth,
+  palette = { color: colors.accent, gradientColor: colors.accentMuted },
+}) => {
   if (data.length === 0) {
     return <EmptyChart message="Record a trip to populate this chart." />;
   }
 
   const maxValue = Math.max(1, ...data.map((point) => point.value));
   return (
-    <BarChart
-      data={toBarData(data)}
-      width={chartWidth}
-      height={160}
+    <ResponsiveBarChart
+      data={data}
+      chartWidth={chartWidth}
       maxValue={Math.ceil(maxValue * 1.15)}
-      noOfSections={4}
-      barWidth={22}
-      spacing={18}
-      initialSpacing={10}
-      endSpacing={10}
-      yAxisLabelSuffix={suffix}
-      yAxisTextStyle={styles.axisText}
-      xAxisLabelTextStyle={styles.axisText}
-      xAxisColor={colors.border}
-      yAxisColor={colors.border}
-      rulesColor={colors.border}
-      backgroundColor="transparent"
-      barBorderRadius={6}
-      isAnimated
-      animationDuration={motion.headingMs}
-      hideRules={false}
-      showValuesAsTopLabel
-      topLabelTextStyle={styles.topLabelText}
+      palette={palette}
     />
   );
 };
@@ -438,6 +557,7 @@ export const InsightsContent: React.FC<ContentProps> = ({
               units,
             ).toFixed(1)}
             helper={distanceUnit}
+            tone="teal"
           />
           <SummaryCard
             label="Drive Time"
@@ -447,6 +567,7 @@ export const InsightsContent: React.FC<ContentProps> = ({
             label="Best Max"
             value={String(Math.round(displaySpeed(model.summary.bestMaxSpeedMps, units)))}
             helper={units}
+            tone="gold"
           />
           <SummaryCard
             label="Overall Avg"
@@ -463,7 +584,6 @@ export const InsightsContent: React.FC<ContentProps> = ({
           <TripBarChart
             data={model.averageSpeedPerTrip}
             chartWidth={chartWidth}
-            suffix=""
           />
         </ChartPanel>
       </AnimatedSection>
@@ -473,7 +593,7 @@ export const InsightsContent: React.FC<ContentProps> = ({
           <TripBarChart
             data={model.maxSpeedPerTrip}
             chartWidth={chartWidth}
-            suffix=""
+            palette={{ color: colors.brandGold, gradientColor: colors.brandGoldDim }}
           />
         </ChartPanel>
       </AnimatedSection>
@@ -483,7 +603,7 @@ export const InsightsContent: React.FC<ContentProps> = ({
           <TripBarChart
             data={model.distancePerTrip}
             chartWidth={chartWidth}
-            suffix=""
+            palette={{ color: colors.brandTeal, gradientColor: colors.accentMuted }}
           />
         </ChartPanel>
       </AnimatedSection>
@@ -585,6 +705,7 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     color: colors.textPrimary,
+    fontFamily: fontFamilies.display,
     fontSize: 18,
     fontWeight: '700',
     marginBottom: spacing.sm,
@@ -592,6 +713,7 @@ const styles = StyleSheet.create({
   },
   emptyBody: {
     color: colors.textSecondary,
+    fontFamily: fontFamilies.body,
     fontSize: 14,
     lineHeight: 20,
     textAlign: 'center',
@@ -617,11 +739,19 @@ const styles = StyleSheet.create({
   },
   summaryValue: {
     color: colors.textPrimary,
+    fontFamily: fontFamilies.numeric,
     fontSize: 26,
     fontWeight: '800',
   },
+  summaryValueGold: {
+    color: colors.brandGold,
+  },
+  summaryValueTeal: {
+    color: colors.brandTeal,
+  },
   summaryLabel: {
     color: colors.textMuted,
+    fontFamily: fontFamilies.bodyBold,
     fontSize: 11,
     fontWeight: '700',
     marginTop: spacing.xxs,
@@ -629,6 +759,7 @@ const styles = StyleSheet.create({
   },
   summaryHelper: {
     color: colors.textSecondary,
+    fontFamily: fontFamilies.body,
     fontSize: 12,
     marginTop: spacing.xxs,
   },
@@ -646,21 +777,29 @@ const styles = StyleSheet.create({
   },
   panelTitle: {
     color: colors.textPrimary,
+    fontFamily: fontFamilies.display,
     fontSize: 17,
     fontWeight: '800',
   },
   panelSubtitle: {
     color: colors.textMuted,
+    fontFamily: fontFamilies.body,
     fontSize: 12,
     marginTop: 2,
   },
   axisText: {
     color: colors.textMuted,
+    fontFamily: fontFamilies.numeric,
     fontSize: 10,
   },
   topLabelText: {
     color: colors.textSecondary,
+    fontFamily: fontFamilies.numeric,
     fontSize: 9,
+  },
+  responsiveChart: {
+    minHeight: 180,
+    width: '100%',
   },
   emptyChart: {
     alignItems: 'center',
@@ -672,6 +811,7 @@ const styles = StyleSheet.create({
   },
   emptyChartText: {
     color: colors.textMuted,
+    fontFamily: fontFamilies.body,
     fontSize: 13,
     textAlign: 'center',
   },
@@ -693,6 +833,7 @@ const styles = StyleSheet.create({
   },
   tripChipText: {
     color: colors.textSecondary,
+    fontFamily: fontFamilies.bodyBold,
     fontSize: 12,
     fontWeight: '700',
   },
@@ -721,10 +862,12 @@ const styles = StyleSheet.create({
   legendLabel: {
     color: colors.textSecondary,
     flex: 1,
+    fontFamily: fontFamilies.body,
     fontSize: 13,
   },
   legendValue: {
     color: colors.textPrimary,
+    fontFamily: fontFamilies.numeric,
     fontSize: 13,
     fontWeight: '700',
   },
@@ -736,6 +879,7 @@ const styles = StyleSheet.create({
   },
   heatmapHourLabel: {
     color: colors.textMuted,
+    fontFamily: fontFamilies.numeric,
     fontSize: 9,
   },
   heatmapRow: {
@@ -745,6 +889,7 @@ const styles = StyleSheet.create({
   },
   heatmapDayLabel: {
     color: colors.textMuted,
+    fontFamily: fontFamilies.bodyMedium,
     fontSize: 10,
     width: 34,
   },
@@ -759,7 +904,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   heatmapCellSelected: {
-    borderColor: colors.textPrimary,
+    borderColor: colors.brandGold,
     borderWidth: 1,
   },
   heatmapDetail: {
@@ -770,11 +915,13 @@ const styles = StyleSheet.create({
   },
   heatmapDetailTitle: {
     color: colors.textPrimary,
+    fontFamily: fontFamilies.bodyBold,
     fontSize: 13,
     fontWeight: '800',
   },
   heatmapDetailText: {
     color: colors.textSecondary,
+    fontFamily: fontFamilies.body,
     fontSize: 12,
     marginTop: 2,
   },

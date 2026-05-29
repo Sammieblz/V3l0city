@@ -24,6 +24,7 @@ exports[`TripHistory renders empty state and a list of trips 1`] = `
       style={
         {
           "color": "#EAEDF2",
+          "fontFamily": "Rajdhani-SemiBold",
           "fontSize": 18,
           "fontWeight": "700",
           "letterSpacing": 0.3,
@@ -47,6 +48,7 @@ exports[`TripHistory renders empty state and a list of trips 1`] = `
       style={
         {
           "color": "#8A8F98",
+          "fontFamily": "Barlow-Medium",
           "fontSize": 16,
           "fontWeight": "500",
         }
@@ -57,7 +59,8 @@ exports[`TripHistory renders empty state and a list of trips 1`] = `
     <Text
       style={
         {
-          "color": "#585E68",
+          "color": "#5D6A70",
+          "fontFamily": "Barlow-Regular",
           "fontSize": 13,
           "marginTop": 8,
           "paddingHorizontal": 40,
@@ -95,6 +98,7 @@ exports[`TripHistory renders empty state and a list of trips 2`] = `
       style={
         {
           "color": "#EAEDF2",
+          "fontFamily": "Rajdhani-SemiBold",
           "fontSize": 18,
           "fontWeight": "700",
           "letterSpacing": 0.3,
@@ -299,7 +303,7 @@ exports[`TripHistory renders empty state and a list of trips 2`] = `
           collapsable={false}
           style={
             {
-              "backgroundColor": "#22262E",
+              "backgroundColor": "#1E2528",
               "borderRadius": 12,
               "marginBottom": 10,
               "shadowColor": "#000",
@@ -317,7 +321,7 @@ exports[`TripHistory renders empty state and a list of trips 2`] = `
             collapsable={false}
             style={
               {
-                "backgroundColor": "#22262E",
+                "backgroundColor": "#1E2528",
                 "borderRadius": 12,
                 "flex": undefined,
                 "shadowColor": "#000",
@@ -374,6 +378,7 @@ exports[`TripHistory renders empty state and a list of trips 2`] = `
                     style={
                       {
                         "color": "#EAEDF2",
+                        "fontFamily": "Barlow-SemiBold",
                         "fontSize": 14,
                         "fontWeight": "600",
                       }
@@ -384,7 +389,8 @@ exports[`TripHistory renders empty state and a list of trips 2`] = `
                   <Text
                     style={
                       {
-                        "color": "#585E68",
+                        "color": "#5D6A70",
+                        "fontFamily": "Barlow-Regular",
                         "fontSize": 12,
                       }
                     }
@@ -412,6 +418,7 @@ exports[`TripHistory renders empty state and a list of trips 2`] = `
                       style={
                         {
                           "color": "#EAEDF2",
+                          "fontFamily": "Rajdhani-Medium",
                           "fontSize": 20,
                           "fontWeight": "700",
                         }
@@ -422,7 +429,8 @@ exports[`TripHistory renders empty state and a list of trips 2`] = `
                     <Text
                       style={
                         {
-                          "color": "#585E68",
+                          "color": "#5D6A70",
+                          "fontFamily": "Barlow-Medium",
                           "fontSize": 10,
                           "letterSpacing": 0.5,
                           "marginTop": 2,
@@ -444,6 +452,7 @@ exports[`TripHistory renders empty state and a list of trips 2`] = `
                       style={
                         {
                           "color": "#EAEDF2",
+                          "fontFamily": "Rajdhani-Medium",
                           "fontSize": 20,
                           "fontWeight": "700",
                         }
@@ -454,7 +463,8 @@ exports[`TripHistory renders empty state and a list of trips 2`] = `
                     <Text
                       style={
                         {
-                          "color": "#585E68",
+                          "color": "#5D6A70",
+                          "fontFamily": "Barlow-Medium",
                           "fontSize": 10,
                           "letterSpacing": 0.5,
                           "marginTop": 2,
@@ -477,6 +487,7 @@ exports[`TripHistory renders empty state and a list of trips 2`] = `
                       style={
                         {
                           "color": "#EAEDF2",
+                          "fontFamily": "Rajdhani-Medium",
                           "fontSize": 20,
                           "fontWeight": "700",
                         }
@@ -487,7 +498,8 @@ exports[`TripHistory renders empty state and a list of trips 2`] = `
                     <Text
                       style={
                         {
-                          "color": "#585E68",
+                          "color": "#5D6A70",
+                          "fontFamily": "Barlow-Medium",
                           "fontSize": 10,
                           "letterSpacing": 0.5,
                           "marginTop": 2,
@@ -503,7 +515,8 @@ exports[`TripHistory renders empty state and a list of trips 2`] = `
                 <Text
                   style={
                     {
-                      "color": "#585E68",
+                      "color": "#5D6A70",
+                      "fontFamily": "Barlow-Regular",
                       "fontSize": 11,
                       "textAlign": "center",
                     }

@@ -5,8 +5,8 @@ Digital speedometer built with Expo and React Native.
 ## Docs
 
 - [Developer guide](docs/developer-guide.md): technical documentation entry point and reading order.
-- [Developer docs](docs/developer/README.md): subsystem docs for architecture, mobile frontend, native speed engine, local data, telemetry/backend, testing, and code ownership.
-- [User guide](docs/user-guide.md): customer-facing guide for using V3l0city on iOS and Android, including trips, settings, history, export, permissions, and troubleshooting.
+- [Developer docs](docs/developer/README.md): subsystem docs for architecture, mobile frontend, native speed engine, local data, telemetry/backend, cloud/social, testing, and code ownership.
+- [User guide](docs/user-guide.md): customer-facing guide for using V3l0city on iOS and Android, including onboarding, trips, settings, history, export, permissions, privacy, and troubleshooting.
 - [Native speed engine](docs/speed-engine.md): platform sensor flow, C++ speed rules, quality diagnostics, and native validation.
 - [Telemetry API](docs/telemetry-api.md): Fastify server setup, HTTP contracts, WebSocket contracts, mobile env vars, and retry behavior.
 
@@ -179,6 +179,10 @@ For simulator/emulator testing, use one of the built-in drive paths:
   - `server/src/` contains the Fastify + WebSocket + SQLite telemetry backend.
   - `src/api/` contains anonymous device registration, HTTP batch upload, WebSocket live streaming, and retry/fallback orchestration.
   - Set `EXPO_PUBLIC_V3L0CITY_API_URL` and `EXPO_PUBLIC_V3L0CITY_WS_URL` to enable mobile telemetry. If either is missing, telemetry is disabled and local trip recording still works.
+- Cloud and social:
+  - `src/cloud/` contains provider-neutral auth, sync, and social interfaces plus the Supabase adapter.
+  - `supabase/` contains migrations and authenticated Edge Functions for optional accounts, cloud sync, friends, nearby discovery, and aggregate leaderboards.
+  - Set `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` to enable cloud features. If either is missing, the app remains local/offline first.
 
 ## Sensors and limitations
 
@@ -218,6 +222,17 @@ npm run ios
 If either mobile env var is missing, telemetry stays disabled. Local speed
 calculation, trip recording, export, and trip history still work. Production
 deployments must use HTTPS/WSS.
+
+Optional Supabase cloud/social features use:
+
+```bash
+EXPO_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co \
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_... \
+npm run ios
+```
+
+Use a publishable key only. Never put a Supabase secret or service-role key in
+the app bundle.
 
 ## Testing
 

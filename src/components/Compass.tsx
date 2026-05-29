@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { colors, fontFamilies } from '../theme/paperTheme';
 
 interface CompassProps {
   heading: number | null;
@@ -46,14 +47,15 @@ const styles = StyleSheet.create({
     height: 120,
     borderRadius: 60,
     borderWidth: 2,
-    borderColor: '#333333',
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   northLabel: {
     position: 'absolute',
     top: 6,
-    color: 'white',
+    color: colors.north,
+    fontFamily: fontFamilies.displayBold,
     fontWeight: 'bold',
   },
   needleContainer: {
@@ -66,12 +68,13 @@ const styles = StyleSheet.create({
     width: 4,
     height: 32,
     borderRadius: 2,
-    backgroundColor: '#FF3B30',
+    backgroundColor: colors.accent,
   },
   headingText: {
     marginTop: 8,
     fontSize: 14,
-    color: '#AAAAAA',
+    fontFamily: fontFamilies.body,
+    color: colors.textSecondary,
   },
 });
 

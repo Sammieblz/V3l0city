@@ -7,7 +7,7 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import { colors, motion } from '../theme/paperTheme';
+import { colors, fontFamilies, motion } from '../theme/paperTheme';
 
 interface SpeedDialProps {
   speed: number;
@@ -51,7 +51,6 @@ const SpeedDial: React.FC<SpeedDialProps> = ({
   speed,
   maxScale,
   units,
-  isPoorSignal = false,
   size = 260,
 }) => {
   const center = size / 2;
@@ -107,6 +106,7 @@ const SpeedDial: React.FC<SpeedDialProps> = ({
             x={labelPos.x}
             y={labelPos.y + size * 0.012}
             fill={colors.textMuted}
+            fontFamily={fontFamilies.numeric}
             fontSize={Math.max(8, size * 0.036)}
             textAnchor="middle"
           >
@@ -147,7 +147,6 @@ const SpeedDial: React.FC<SpeedDialProps> = ({
           style={[
             styles.speedText,
             { fontSize: size * 0.277, marginBottom: -size * 0.015 },
-            isPoorSignal && styles.speedTextDegraded,
           ]}
         >
           {Math.round(speed)}
@@ -172,15 +171,14 @@ const styles = StyleSheet.create({
   },
   speedText: {
     fontSize: 72,
+    fontFamily: fontFamilies.numeric,
     fontWeight: '200',
     color: colors.textPrimary,
     letterSpacing: 0,
   },
-  speedTextDegraded: {
-    color: colors.warning,
-  },
   unitsText: {
     fontSize: 16,
+    fontFamily: fontFamilies.displayMedium,
     fontWeight: '500',
     color: colors.textSecondary,
     textTransform: 'uppercase',

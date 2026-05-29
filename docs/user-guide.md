@@ -35,8 +35,17 @@ placement, and low-power device modes.
 
 ## First Launch
 
-When you open V3l0city for the first time, your phone may ask for location
-permission.
+When you open V3l0city for the first time, the app asks how you want to start:
+
+- **Sign up**: create a V3l0city account for optional online features.
+- **Sign in**: restore an existing account.
+- **Continue offline**: use the app anonymously on this device.
+
+Choosing offline takes you straight to the dashboard. You can open Account /
+Sync later if you want online backup, friends, nearby discovery, or
+leaderboards.
+
+Your phone may ask for location permission during first use.
 
 Choose **Allow While Using App** so V3l0city can calculate speed, distance, and
 heading while the app is open.
@@ -102,6 +111,11 @@ Reset does not delete saved trip history.
 Tap the menu icon in the top-left corner to open:
 
 - **History**
+- **Insights**
+- **Leaderboards**
+- **Find Friends**
+- **Account / Sync**
+- **Privacy**
 - **Settings**
 - **Export as JSON**
 - **Export as CSV**
@@ -123,11 +137,44 @@ Tap **Clear All** to remove all saved trips from the device.
 
 Clearing history is local to the app data stored on your device.
 
+## Account, Sync, Friends, and Leaderboards
+
+Accounts are optional. You can use V3l0city anonymously and offline for speed,
+trips, history, insights, and exports.
+
+Use **Menu > Account / Sync** if you want online features:
+
+- Sign up with your name, username, email, and password.
+- Confirm your email if the app asks you to.
+- Sign in with email and password.
+- Turn online backup on or off.
+- Turn leaderboard sharing on or off.
+- Turn nearby discovery on or off.
+
+After sign-up, V3l0city shows online feature setup so you can choose online
+backup, leaderboards, and nearby discovery. Normal sign-in does not repeat that
+setup after your profile has completed it once.
+
+Account / Sync also lets you edit your name and username later. Tap **Save
+changes** to update your account.
+
+Online backup saves trips to your account so they can be restored on another
+device. Your phone remains the source of truth: local trips are kept, and
+restore only adds trips that are missing locally.
+
+Use **Menu > Find Friends** to search usernames, view people in your general
+area, or see friend suggestions. Nearby discovery requires opt-in and uses only
+a general area, not exact location or trip routes.
+
+Use **Menu > Leaderboards** to compare summary stats such as distance, max
+speed, and trip count. Other users can see leaderboard totals, not your detailed
+trip samples or private trip history.
+
 ## Exporting Data
 
 Use the menu to export trips:
 
-- **Export as JSON**: best for backups, diagnostics, or developers.
+- **Export as JSON**: best for backups or support.
 - **Export as CSV**: best for spreadsheets.
 
 Your phone will open the share sheet so you can save or send the file.
@@ -300,16 +347,58 @@ history, export, speed, and compass features still work.
 Android and iOS push notifications require a development or production build.
 Expo Go is not the intended runtime for V3l0city notifications.
 
+## Widgets and Car Glances
+
+V3l0city can show a small speed/trip glance outside the main app:
+
+- iPhone widgets and Live Activities show your latest active-trip speed,
+  distance, elapsed time, and signal status.
+- Android home-screen widgets show the same active-trip snapshot.
+- Android can also show a quiet active-trip notification while a trip is
+  running, if notifications are allowed.
+
+Widgets do not measure speed by themselves. Keep V3l0city open while driving so
+the speed engine can update them. If the app stops updating, widgets show an
+open-app message instead of old speed.
+
+CarPlay support starts through iPhone widgets and Live Activities. Full CarPlay
+and Android Auto dashboards depend on Apple and Google car-app rules and are not
+available in this version.
+
 ## Privacy and Data
 
-V3l0city saves trips locally on your device.
+Open **Menu > Privacy** to read the in-app privacy policy.
 
-If telemetry is not configured by the developer or organization that built the
-app, trip data stays local except when you export or share it yourself.
+V3l0city saves trips locally on your device first:
 
-When telemetry is configured, V3l0city may send active trip samples to a server
-for diagnostics or analysis. The app uses an anonymous device identity rather
-than a user account in the current version.
+- Your phone stores saved trips, speed readings, app settings, unfinished trip
+  recovery, and backup status.
+- Your phone stores a small anonymous app ID and whether you finished the
+  first-launch setup.
+- If you sign in, your phone stores a secure sign-in token so you do not have
+  to log in every time. V3l0city does not store your password.
+
+Permissions:
+
+- Precise foreground location is required for speed, distance, and compass
+  accuracy.
+- Motion sensors may be used to smooth speed and heading.
+- Notifications are optional.
+- Network access is optional for local-only use.
+
+If troubleshooting data sharing is not enabled in your build, trip data stays
+on your phone except when you export or share it yourself.
+
+When troubleshooting data sharing is enabled, V3l0city may send active trip
+speed readings to help improve or fix the app. This uses an anonymous app ID,
+not your name.
+
+When online backup is available and you choose to sign in, V3l0city can back up
+saved trips to your account. Social features are opt-in. Nearby discovery stores
+only a general nearby area, and leaderboards show totals only.
+
+V3l0city does not share exact trip routes with friends, nearby users, or
+leaderboards. It does not upload your contacts for friend discovery.
 
 Network issues do not stop the local speedometer or local trip saving.
 

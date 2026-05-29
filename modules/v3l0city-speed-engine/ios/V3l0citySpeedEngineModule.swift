@@ -1,6 +1,11 @@
 import CoreLocation
 import CoreMotion
 import ExpoModulesCore
+import WidgetKit
+
+#if canImport(ActivityKit)
+import ActivityKit
+#endif
 
 private let speedUpdateEvent = "speedUpdate"
 private let speedErrorEvent = "speedError"
@@ -53,6 +58,26 @@ public final class V3l0citySpeedEngineModule: Module {
       self.engineQueue.async {
         self.engine.setMountOffsetDegrees(value)
       }
+    }
+
+    AsyncFunction("writeDriveSurfaceSnapshot") { (snapshot: [String: Any]) in
+      self.writeDriveSurfaceSnapshot(snapshot)
+    }
+
+    AsyncFunction("clearDriveSurfaceSnapshot") {
+      self.clearDriveSurfaceSnapshot()
+    }
+
+    AsyncFunction("startTripLiveActivity") { (snapshot: [String: Any]) in
+      self.startTripLiveActivity(snapshot)
+    }
+
+    AsyncFunction("updateTripLiveActivity") { (snapshot: [String: Any]) in
+      self.updateTripLiveActivity(snapshot)
+    }
+
+    AsyncFunction("endTripLiveActivity") { (snapshot: [String: Any]) in
+      self.endTripLiveActivity(snapshot)
     }
 
     OnCreate {
@@ -309,6 +334,134 @@ public final class V3l0citySpeedEngineModule: Module {
     }
     if let value = options[key] as? Int {
       return Double(value)
+    }
+    return fallback
+  }
+
+  private func writeDriveSurfaceSnapshot(_ snapshot: [String: Any]) {
+    guard JSONSerialization.isValidJSONObject(snapshot),
+          let data = try? JSONSerialization.data(withJSONObject: snapshot),
+          let json = String(data: data, encoding: .utf8)
+    else {
+      return
+    }
+
+    let defaults = v3l0cityDriveSurfaceDefaults()
+    defaults.set(json, forKey: v3l0cityDriveSurfaceSnapshotKey)
+    defaults.synchronize()
+
+    if #available(iOS 14.0, *) {
+      WidgetCenter.shared.reloadAllTimelines()
+    }
+  }
+
+  private func clearDriveSurfaceSnapshot() {
+    let defaults = v3l0cityDriveSurfaceDefaults()
+    defaults.removeObject(forKey: v3l0cityDriveSurfaceSnapshotKey)
+    defaults.synchronize()
+
+    if #available(iOS 14.0, *) {
+      WidgetCenter.shared.reloadAllTimelines()
+    }
+  }
+
+  private func startTripLiveActivity(_ snapshot: [String: Any]) {
+#if canImport(ActivityKit)
+    if #available(iOS 16.2, *) {
+      let contentState = liveActivityContentState(from: snapshot)
+      guard ActivityAuthorizationInfo().areActivitiesEnabled else {
+        return
+      }
+
+      Task {
+        if let existing = Activity<V3l0cityTripActivityAttributes>.activities.first {
+          await existing.update(ActivityContent(state: contentState, staleDate: Date().addingTimeInterval(5)))
+          return
+        }
+
+        let attributes = V3l0cityTripActivityAttributes(
+          tripId: stringValue(snapshot, "tripId", fallback: "active-trip"),
+          startedAtMs: doubleValue(snapshot, "updatedAtMs", fallback: Date().timeIntervalSince1970 * 1000.0)
+        )
+        _ = try? Activity.request(
+          attributes: attributes,
+          content: ActivityContent(state: contentState, staleDate: Date().addingTimeInterval(5)),
+          pushType: nil
+        )
+      }
+    }
+#endif
+  }
+
+  private func updateTripLiveActivity(_ snapshot: [String: Any]) {
+#if canImport(ActivityKit)
+    if #available(iOS 16.2, *) {
+      let contentState = liveActivityContentState(from: snapshot)
+      Task {
+        for activity in Activity<V3l0cityTripActivityAttributes>.activities {
+          await activity.update(ActivityContent(state: contentState, staleDate: Date().addingTimeInterval(5)))
+        }
+      }
+    }
+#endif
+  }
+
+  private func endTripLiveActivity(_ snapshot: [String: Any]) {
+#if canImport(ActivityKit)
+    if #available(iOS 16.2, *) {
+      let contentState = liveActivityContentState(from: snapshot)
+      Task {
+        for activity in Activity<V3l0cityTripActivityAttributes>.activities {
+          await activity.end(ActivityContent(state: contentState, staleDate: nil), dismissalPolicy: .immediate)
+        }
+      }
+    }
+#endif
+  }
+
+#if canImport(ActivityKit)
+  @available(iOS 16.2, *)
+  private func liveActivityContentState(from snapshot: [String: Any]) -> V3l0cityTripActivityAttributes.ContentState {
+    V3l0cityTripActivityAttributes.ContentState(
+      speedText: stringValue(snapshot, "speedText", fallback: "--"),
+      units: stringValue(snapshot, "units", fallback: "MPH"),
+      distanceText: stringValue(snapshot, "distanceText", fallback: "0.0 mi"),
+      elapsedText: stringValue(snapshot, "elapsedText", fallback: "00:00:00"),
+      headingText: stringValue(snapshot, "headingText", fallback: "--"),
+      signalText: stringValue(snapshot, "signalText", fallback: "Ready"),
+      isStale: boolValue(snapshot, "stale", fallback: false),
+      tripActive: boolValue(snapshot, "tripActive", fallback: false),
+      updatedAtMs: doubleValue(snapshot, "updatedAtMs", fallback: Date().timeIntervalSince1970 * 1000.0)
+    )
+  }
+#endif
+
+  private func stringValue(_ snapshot: [String: Any], _ key: String, fallback: String) -> String {
+    if let value = snapshot[key] as? String, !value.isEmpty {
+      return value
+    }
+    return fallback
+  }
+
+  private func doubleValue(_ snapshot: [String: Any], _ key: String, fallback: Double) -> Double {
+    if let value = snapshot[key] as? NSNumber {
+      return value.doubleValue
+    }
+    if let value = snapshot[key] as? Double {
+      return value
+    }
+    if let value = snapshot[key] as? Int {
+      return Double(value)
+    }
+    return fallback
+  }
+
+  private func boolValue(_ snapshot: [String: Any], _ key: String, fallback: Bool) -> Bool {
+    if let value = snapshot[key] as? Bool {
+      return value
+    }
+    if let value = snapshot[key] as? NSNumber {
+      return value.boolValue
     }
     return fallback
   }

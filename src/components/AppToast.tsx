@@ -1,9 +1,16 @@
 import React from 'react';
-import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Snackbar } from 'react-native-paper';
 
-import { colors, radii, spacing } from '../theme/paperTheme';
+import { colors, fontFamilies, radii, spacing } from '../theme/paperTheme';
 
 export type AppToastVariant = 'info' | 'success' | 'warning' | 'error';
 
@@ -29,28 +36,30 @@ const variantStyle: Record<
   info: {
     icon: 'information-outline',
     accent: colors.accent,
-    background: 'rgba(12, 14, 18, 0.98)',
+    background: colors.surfaceGlass,
   },
   success: {
     icon: 'check-circle-outline',
-    accent: colors.accent,
-    background: 'rgba(10, 20, 24, 0.98)',
+    accent: colors.brandTeal,
+    background: colors.surfaceGlass,
   },
   warning: {
     icon: 'alert-outline',
-    accent: colors.warning,
-    background: 'rgba(27, 21, 10, 0.98)',
+    accent: colors.brandGold,
+    background: colors.toastWarningBg,
   },
   error: {
     icon: 'alert-circle-outline',
     accent: colors.danger,
-    background: 'rgba(30, 13, 18, 0.98)',
+    background: colors.toastErrorBg,
   },
 };
 
 export default function AppToast({ toast, bottom, onDismiss }: AppToastProps) {
   const variant = toast?.variant ?? 'info';
   const visual = variantStyle[variant];
+  const { width } = useWindowDimensions();
+  const toastWidth = Math.min(Math.max(width - spacing.md * 2, 0), 420);
 
   return (
     <Snackbar
@@ -63,6 +72,7 @@ export default function AppToast({ toast, bottom, onDismiss }: AppToastProps) {
         {
           backgroundColor: visual.background,
           borderColor: visual.accent,
+          width: toastWidth,
         },
       ]}
     >
@@ -80,14 +90,17 @@ export default function AppToast({ toast, bottom, onDismiss }: AppToastProps) {
 
 const styles = StyleSheet.create({
   wrapper: {
-    left: spacing.md,
-    right: spacing.md,
+    alignItems: 'center',
+    left: 0,
+    paddingHorizontal: spacing.md,
+    right: 0,
   },
   container: {
     borderRadius: radii.sm,
     borderWidth: StyleSheet.hairlineWidth,
     elevation: 8,
-    shadowColor: '#000000',
+    marginHorizontal: 0,
+    shadowColor: colors.background,
     shadowOpacity: 0.35,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 8 },
@@ -98,8 +111,9 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   message: {
-    color: '#F8FAFC',
+    color: colors.textPrimary,
     flex: 1,
+    fontFamily: fontFamilies.bodyBold,
     fontSize: 13,
     fontWeight: '700',
     letterSpacing: 0,

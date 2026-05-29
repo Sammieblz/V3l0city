@@ -18,6 +18,7 @@ it. This is not ownership by person. It is ownership by subsystem.
 | Trip persistence | `src/database/database.ts`, `src/database/tripRepository.ts` | Jest, export tests |
 | Export | `src/database/exportService.ts`, `src/database/exportFormat.ts` | export tests |
 | Mobile telemetry | `src/api/*` | telemetry Jest tests |
+| Cloud sync/social | `src/cloud/*`, `supabase/**`, cloud screens | TypeScript, Jest, Supabase migration/advisor checks |
 | Server API | `server/src/app.ts`, `server/src/contracts.ts`, `server/src/store.ts` | `npm run server:test` |
 | Docs | `README.md`, `docs/**` | link/typo scan |
 
@@ -159,6 +160,29 @@ Be careful with:
 
 Add tests for both valid and invalid auth.
 
+### Change Cloud Sync, Friends, or Leaderboards
+
+Start in:
+
+```text
+src/cloud/
+supabase/
+```
+
+Then update:
+
+- account/friends/leaderboard screens
+- local sync metadata in `src/database/*` if the local contract changes
+- `docs/developer/cloud-sync-and-social.md`
+- Supabase migration tests
+
+Rules:
+
+- Local SQLite remains source of truth.
+- Use publishable keys in the mobile app only.
+- Keep RLS enabled on exposed tables.
+- Keep exact routes and trip details out of social/leaderboard responses.
+
 ### Change Settings
 
 Start in:
@@ -237,4 +261,3 @@ Keep format generation mostly pure.
 - Commands are current.
 - iOS/Android differences are explicit.
 - Warnings do not overpromise GPS accuracy.
-

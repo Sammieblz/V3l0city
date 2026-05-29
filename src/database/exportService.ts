@@ -1,9 +1,29 @@
 import { File, Paths } from 'expo-file-system';
+import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
 
-import { buildExportPayload, buildTripsCsv } from './exportFormat';
-import { getTripSpeedSamples, getTrips } from './tripRepository';
-import { getPreferences } from './preferencesRepository';
+import {
+  buildExportPayload,
+  buildTripsCsv,
+  parseExportPayload,
+  previewImportPayload,
+  type ImportPreview,
+} from './exportFormat';
+import {
+  getTripSpeedSamples,
+  getTrips,
+  importTripsMergeOnly,
+  type ImportTripsMergeResult,
+} from './tripRepository';
+import { getPreferences, savePreferences } from './preferencesRepository';
+
+export { previewImportPayload } from './exportFormat';
+
+export type JsonImportResult = ImportPreview &
+  ImportTripsMergeResult & {
+    preferencesRestored: boolean;
+    message: string;
+  };
 
 const timestamp = (): string => {
   const d = new Date();
@@ -57,3 +77,53 @@ export const exportAsCsv = async (): Promise<void> => {
     UTI: 'public.comma-separated-values-text',
   });
 };
+
+export const importExportPayload = async (
+  rawPayload: unknown
+): Promise<JsonImportResult> => {
+  const payload = parseExportPayload(rawPayload);
+  const preview = previewImportPayload(payload);
+  const importResult = await importTripsMergeOnly(payload.trips);
+  if (payload.preferences) {
+    await savePreferences(payload.preferences);
+  }
+
+  const preferencesText = payload.preferences ? ' Preferences restored.' : '';
+  return {
+    ...preview,
+    ...importResult,
+    preferencesRestored: payload.preferences != null,
+    message:
+      `Imported ${importResult.tripsImported} trip${
+        importResult.tripsImported === 1 ? '' : 's'
+      } and ${importResult.samplesImported} sample${
+        importResult.samplesImported === 1 ? '' : 's'
+      }. Skipped ${importResult.tripsSkipped} existing trip${
+        importResult.tripsSkipped === 1 ? '' : 's'
+      }.${preferencesText}`,
+  };
+};
+
+export const pickAndImportJsonExport =
+  async (): Promise<JsonImportResult | null> => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ['application/json', 'text/json', 'text/plain'],
+      copyToCacheDirectory: true,
+      multiple: false,
+    });
+
+    if (result.canceled || !result.assets?.[0]) {
+      return null;
+    }
+
+    const file = new File(result.assets[0].uri);
+    const text = await file.text();
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      throw new Error('Choose a V3l0city JSON export file.');
+    }
+
+    return importExportPayload(parsed);
+  };
