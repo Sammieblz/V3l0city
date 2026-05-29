@@ -1,10 +1,15 @@
 # V3l0city Speed Engine
 
-V3l0city uses a foreground-only native speed engine for iOS and Android development builds. The React Native UI still talks to a stable hook shape, but real sensor collection and speed computation now live below JS.
+V3l0city uses a native speed engine for iOS and Android development builds. The
+React Native UI still talks to a stable hook shape, but real sensor collection
+and speed computation live below JS. The engine is foreground-first, with an
+active-trip live session for widgets, Live Activity, and Android notification
+surfaces after the user starts a trip.
 
 ## Data Flow
 
-1. Swift and Kotlin collect platform sensor data while the app is in the foreground.
+1. Swift and Kotlin collect platform sensor data while the app is foregrounded
+   or while a user-started active-trip live session is running.
 2. Native collectors normalize samples:
    - GPS location: latitude, longitude, accuracy, native speed when available, timestamp.
    - GPS course: course/bearing and bearing accuracy when available.
@@ -150,6 +155,11 @@ repeatable city/highway profile at 10 Hz, sets `qualityReasons` to
 `simulated-drive`, updates heading, accumulates trip distance when recording, and
 continues to feed local persistence and telemetry just like live state.
 
+When a simulated trip is active, the drive-surface snapshot includes
+`simulationActive`. Native iOS and Android code mirrors the same simulated
+profile into widgets, Live Activity, and the Android active-trip notification so
+those surfaces can be tested after the app is minimized.
+
 To boot with the app simulator already enabled:
 
 ```bash
@@ -158,9 +168,9 @@ EXPO_PUBLIC_V3L0CITY_SIMULATED_DRIVE=1 npm run android
 
 Use the same env var with `npm run ios` for iOS Simulator.
 
-This path is ideal for UI, trip save/history, export, and telemetry testing. It
-does not validate the native platform sensor collectors because it intentionally
-bypasses them.
+This path is ideal for UI, trip save/history, export, telemetry, and widget
+visual testing. It does not validate the native platform sensor collectors
+because it intentionally bypasses them.
 
 ### Android Emulator GPS Route
 

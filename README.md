@@ -106,14 +106,17 @@ For simulator/emulator testing, use one of the built-in drive paths:
 
 - App-level simulation: in a development build, open **Settings** and turn on
   **Drive Simulator**. This bypasses native sensors and drives the dashboard,
-  trip recording, local storage, and telemetry path with a repeatable synthetic
-  city/highway profile. You can also start with it enabled:
+  trip recording, local storage, telemetry path, widgets, and Live Activity with
+  a repeatable synthetic city/highway profile. You can also start with it
+  enabled:
 
   ```bash
   EXPO_PUBLIC_V3L0CITY_SIMULATED_DRIVE=1 npm run android
   ```
 
-  For iOS, use the same env var with `npm run ios`.
+  For iOS, use the same env var with `npm run ios`. This is the easiest way to
+  test widget visuals without physically moving a device. It does not validate
+  the real native GPS/motion collectors.
 
 - Android native-location simulation: run the app on an Android emulator, grant
   location permission, start a trip, then run this in another terminal:
@@ -162,6 +165,7 @@ For simulator/emulator testing, use one of the built-in drive paths:
   - Swift owns iOS foreground `CLLocationManager` + `CoreMotion` collection. Kotlin owns Android foreground `FusedLocationProviderClient` + `SensorManager` collection.
   - Both platforms normalize samples into the shared C++ core in `modules/v3l0city-speed-engine/common/cpp`, which computes speed, trip stats, vehicle direction, heading diagnostics, quality, movement flags, and stale state.
   - Native modules emit `speedUpdate` events at up to 10 Hz so the dial stays responsive without forcing unnecessary React renders.
+  - User-started active trips also start a native live drive session for widgets, Live Activity, and the Android active-trip notification. Those surfaces publish at about 1 Hz and stop when the trip is saved.
 - React Native integration lives in `src/hooks/useVelocitySensors.ts`:
   - Uses `V3l0citySpeedEngine` by default in iOS/Android development builds.
   - Keeps a JS fallback using `expo-location`, `expo-sensors`, `src/hooks/useKalmanSpeedFilter.ts`, and helpers in `src/utils/` for tests and unsupported runtimes such as Expo Go.
@@ -186,7 +190,8 @@ For simulator/emulator testing, use one of the built-in drive paths:
 
 ## Sensors and limitations
 
-- The native engine is foreground-only. It stops native collectors when the app backgrounds.
+- The native engine is foreground-first until a trip starts. During a user-started active trip, native live sessions may keep collectors running for widgets, Live Activity, and the Android active-trip notification.
+- Widgets do not passively start GPS. Start a trip in the app first; save/stop the trip to end live surface tracking.
 - Expo Go is not a target for the native engine; use an iOS or Android development build so the local Expo Module is compiled into the app.
 - The C++ core prefers valid native GPS speed, falls back to distance/time, rejects poor or outlier GPS, predicts between GPS fixes with IMU input, and decays to `0` after stale GPS.
 - The compass prefers GPS course while moving, falls back to device heading when stopped/slow, and requires precise foreground location. Coarse/approximate location shows a precise-location-required state.

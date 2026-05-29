@@ -220,12 +220,15 @@ With autostart on:
 Autostart is useful when you want V3l0city to begin recording without pressing
 Start Trip every time.
 
-### Autosave on Exit
+### Trip Recovery
 
-When enabled, V3l0city saves an active trip if the app goes to the background.
+V3l0city creates a local draft when a trip starts and keeps samples on the phone
+as the trip runs. If the app closes unexpectedly, it tries to recover the
+unfinished trip the next time you open it.
 
-This helps avoid losing a trip if you switch apps or lock the phone. Because the
-speed engine is foreground-only, keep V3l0city open for live speed tracking.
+Use **Stop & Save** when you are done driving. During an active trip, live
+widgets and Live Activities may keep updating after the app is backgrounded if
+the needed permissions are allowed.
 
 ### Orientation
 
@@ -249,6 +252,10 @@ Production users should not need this option.
 
 In development builds, Settings may show Drive Simulator. This is a testing tool
 that simulates a drive without moving the phone.
+
+When a simulated trip is active, V3l0city also sends simulated live data to the
+widgets and Live Activity so you can test those surfaces from a simulator or
+emulator.
 
 Production users should not need this option.
 
@@ -357,8 +364,9 @@ V3l0city can show a small speed/trip glance outside the main app:
   pause widget refreshes. If you need live speed with the phone locked or in
   CarPlay, use the Live Activity.
 - Android home-screen widgets show the same active-trip information and resize
-  between compact and expanded layouts while the active-trip notification is
-  running.
+  between compact, medium, and expanded layouts while the active-trip
+  notification is running. Larger sizes show a speed dial, stats, compass, time,
+  and signal status.
 - Android can also show a quiet active-trip notification while a trip is
   running, if notifications are allowed.
 
@@ -366,6 +374,10 @@ Widgets do not start GPS by themselves. Start a trip in V3l0city first; during
 that active trip, the native speed engine updates the live widgets. If tracking
 stops or the latest update is too old, widgets show an open-app message instead
 of old speed.
+
+In development builds, Drive Simulator also updates widgets during an active
+trip. This is for testing only; real trips still use real location and motion
+data.
 
 On iPhone, live screen-off updates may ask for location permission that allows
 active-trip tracking in the background. On Android, live widgets need precise

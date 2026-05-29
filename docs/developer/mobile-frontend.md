@@ -240,11 +240,16 @@ When enabled:
 The moving/stopped flags come from the speed hook and ultimately from native
 or JS speed state.
 
-### Autosave on Exit
+### Trip Recovery And Background Surfaces
 
-When enabled, an AppState transition from active to background/inactive saves
-the trip. This is not background tracking. It is a preservation behavior for
-foreground-only recording.
+The app creates a draft trip when recording starts and appends samples locally
+while the trip is active. React no longer auto-saves just because the app moves
+to the background; active trips are owned by the native live drive session until
+the user stops/saves them.
+
+If the app closes unexpectedly, `recoverActiveTrip()` restores the unfinished
+draft on next launch. Widgets, Live Activities, and the Android active-trip
+notification consume the drive-surface state produced by native code.
 
 ### Orientation
 
@@ -266,7 +271,10 @@ reasons.
 ### Drive Simulator
 
 Development-only. It bypasses native sensors and feeds deterministic drive
-state through the same hook output shape.
+state through the same hook output shape. During active simulated trips, the
+drive-surface snapshot is marked with `simulationActive` so native iOS and
+Android code can keep widgets, Live Activity, and the Android active-trip
+notification moving after the React screen is backgrounded.
 
 ## Preferences
 
