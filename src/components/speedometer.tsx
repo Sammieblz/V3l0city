@@ -70,6 +70,7 @@ import {
   stopLiveDriveSession,
   updateLiveDriveSession,
 } from '../driveSurface/driveSurfaceStore';
+import { registerCarTripController } from '../car/carActions';
 import { buildDriveSurfaceSnapshot } from '../driveSurface/snapshot';
 import type { Trip, TripSpeedSample } from '../domain/trip';
 import { useVelocitySensors } from '../hooks/useVelocitySensors';
@@ -613,7 +614,7 @@ export default function Speedometer() {
     }
   }, [refreshDrawerAccountSummary]);
 
-  const startTrip = async () => {
+  const startTrip = useCallback(async () => {
     if (isTripActive) return;
     const start = new Date();
     const tripId = `${start.getTime()}`;
@@ -641,7 +642,7 @@ export default function Speedometer() {
     setCurrentTripStart(start);
     liveDriveSessionActive.current = false;
     void tripTelemetryService.startTrip(draftTrip);
-  };
+  }, [isTripActive, mountLabel, reset, units]);
 
   const stopAndSaveTrip = useCallback(async () => {
     if (!isTripActive) return;
@@ -718,6 +719,70 @@ export default function Speedometer() {
     reset();
     setElapsedMs(0);
   };
+
+  const pauseTripFromCar = useCallback(async () => {
+    if (!isTripActive || isTripPaused) return;
+    setIsTripPaused(true);
+    showToast('Trip paused', 'warning');
+  }, [isTripActive, isTripPaused, showToast]);
+
+  const resumeTripFromCar = useCallback(async () => {
+    if (!isTripActive || !isTripPaused || isPermissionError || isSensorUnavailable) {
+      return;
+    }
+    setIsTripPaused(false);
+    showToast('Trip resumed', 'success');
+  }, [
+    isPermissionError,
+    isSensorUnavailable,
+    isTripActive,
+    isTripPaused,
+    showToast,
+  ]);
+
+  useEffect(
+    () =>
+      registerCarTripController({
+        getStatus: () => {
+          const blocked =
+            isPermissionError || isPreciseLocationError || isSensorUnavailable;
+          return {
+            available: true,
+            tripActive: isTripActive,
+            tripPaused: isTripPaused,
+            canStart: !isTripActive && !blocked,
+            canPause: isTripActive && !isTripPaused,
+            canResume: isTripActive && isTripPaused && !blocked,
+            canStop: isTripActive,
+            unavailableReason: blocked
+              ? 'Check location and sensor permissions on your phone.'
+              : undefined,
+          };
+        },
+        startTrip: async () => {
+          await startTrip();
+          showToast('Trip started', 'success');
+        },
+        pauseTrip: pauseTripFromCar,
+        resumeTrip: resumeTripFromCar,
+        stopAndSaveTrip: async () => {
+          await stopAndSaveTrip();
+          showToast('Trip saved', 'success');
+        },
+      }),
+    [
+      isPermissionError,
+      isPreciseLocationError,
+      isSensorUnavailable,
+      isTripActive,
+      isTripPaused,
+      pauseTripFromCar,
+      resumeTripFromCar,
+      showToast,
+      startTrip,
+      stopAndSaveTrip,
+    ],
+  );
 
   const handleSimulationToggle = (enabled: boolean) => {
     setSimulationEnabled(enabled);
@@ -1009,13 +1074,13 @@ export default function Speedometer() {
       void startTrip();
       showToast('Trip autostarted', 'success');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     autoStart,
     isTripActive,
     isPermissionError,
     isSensorUnavailable,
     showToast,
+    startTrip,
     state.isMoving,
   ]);
 

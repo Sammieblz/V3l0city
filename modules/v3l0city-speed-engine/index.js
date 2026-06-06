@@ -61,6 +61,13 @@ async function clearDriveSurfaceSnapshot() {
   await nativeModule.clearDriveSurfaceSnapshot();
 }
 
+async function readDriveSurfaceSnapshot() {
+  if (!nativeModule?.readDriveSurfaceSnapshot) {
+    return null;
+  }
+  return nativeModule.readDriveSurfaceSnapshot();
+}
+
 async function startLiveDriveSession(snapshot) {
   if (!nativeModule?.startLiveDriveSession) {
     return;
@@ -127,6 +134,7 @@ module.exports = {
   setMountOffsetDegrees,
   writeDriveSurfaceSnapshot,
   clearDriveSurfaceSnapshot,
+  readDriveSurfaceSnapshot,
   startLiveDriveSession,
   updateLiveDriveSession,
   stopLiveDriveSession,

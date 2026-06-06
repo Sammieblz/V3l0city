@@ -79,6 +79,7 @@ export function setTripAccumulation(active: boolean): Promise<void>;
 export function setMountOffsetDegrees(value: number): Promise<void>;
 export function writeDriveSurfaceSnapshot(snapshot: DriveSurfaceSnapshot): Promise<void>;
 export function clearDriveSurfaceSnapshot(): Promise<void>;
+export function readDriveSurfaceSnapshot(): Promise<DriveSurfaceSnapshot | null>;
 export function startLiveDriveSession(snapshot: DriveSurfaceSnapshot): Promise<void>;
 export function updateLiveDriveSession(snapshot: DriveSurfaceSnapshot): Promise<void>;
 export function stopLiveDriveSession(snapshot: DriveSurfaceSnapshot): Promise<void>;

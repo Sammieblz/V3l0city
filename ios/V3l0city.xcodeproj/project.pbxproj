@@ -396,7 +396,7 @@
 			inputPaths = (
 				"$(SRCROOT)/.xcode.env",
 				"$(SRCROOT)/.xcode.env.local",
-				"$(SRCROOT)/V3l0city/V3l0city.entitlements",
+				"$(SRCROOT)/V3l0city/V3l0city.debug.entitlements",
 				"$(SRCROOT)/Pods/Target Support Files/Pods-V3l0city/expo-configure-project.sh",
 			);
 			name = "[Expo] Configure project";
@@ -448,7 +448,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = V3l0city/V3l0city.entitlements;
+				CODE_SIGN_ENTITLEMENTS = V3l0city/V3l0city.debug.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_BITCODE = NO;
 				GCC_PREPROCESSOR_DEFINITIONS = (

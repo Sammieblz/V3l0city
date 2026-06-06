@@ -5,6 +5,7 @@ import type { DriveSurfaceSnapshot } from './snapshot';
 type DriveSurfaceNative = typeof NativeSpeedEngine & {
   writeDriveSurfaceSnapshot?: (snapshot: DriveSurfaceSnapshot) => Promise<void>;
   clearDriveSurfaceSnapshot?: () => Promise<void>;
+  readDriveSurfaceSnapshot?: () => Promise<DriveSurfaceSnapshot | null>;
   startLiveDriveSession?: (snapshot: DriveSurfaceSnapshot) => Promise<void>;
   updateLiveDriveSession?: (snapshot: DriveSurfaceSnapshot) => Promise<void>;
   stopLiveDriveSession?: (snapshot: DriveSurfaceSnapshot) => Promise<void>;
@@ -30,6 +31,11 @@ export const writeDriveSurfaceSnapshot = async (
 export const clearDriveSurfaceSnapshot = async (): Promise<void> => {
   await nativeDriveSurface.clearDriveSurfaceSnapshot?.();
 };
+
+export const readDriveSurfaceSnapshot =
+  async (): Promise<DriveSurfaceSnapshot | null> =>
+    (nativeDriveSurface.readDriveSurfaceSnapshot?.() as Promise<DriveSurfaceSnapshot | null> | undefined) ??
+    null;
 
 export const startLiveDriveSession = async (
   snapshot: DriveSurfaceSnapshot,

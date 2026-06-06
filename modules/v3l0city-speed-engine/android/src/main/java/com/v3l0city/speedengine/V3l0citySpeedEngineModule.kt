@@ -66,6 +66,10 @@ class V3l0citySpeedEngineModule : Module() {
       LiveDriveSessionManager.clearDriveSurfaceSnapshot(context)
     }
 
+    AsyncFunction("readDriveSurfaceSnapshot") {
+      DriveSurfaceStore.readMap(context)
+    }
+
     AsyncFunction("startLiveDriveSession") { snapshot: Map<String, Any?> ->
       LiveDriveSessionManager.startLiveSession(context, snapshot)
     }

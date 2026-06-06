@@ -23,8 +23,8 @@ Start here if you are deciding which guide to read.
 - [Testing and operations](developer/testing-and-operations.md): commands,
   simulator flows, environment variables, and troubleshooting.
 - [Widgets and car surfaces](developer/widgets-and-car-surfaces.md): live drive
-  sessions, iOS Live Activity/widget behavior, Android widget variants, and car
-  surface constraints.
+  sessions, iOS Live Activity/widget behavior, Android widget variants, and the
+  CarPlay/Android Auto simulator POC.
 - [Code ownership map](developer/code-ownership.md): where to make changes and
   what to validate.
 - [Native speed engine](speed-engine.md): deeper details on iOS/Android sensor

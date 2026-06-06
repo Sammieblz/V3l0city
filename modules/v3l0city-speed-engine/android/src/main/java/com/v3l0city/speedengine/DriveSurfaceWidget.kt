@@ -96,6 +96,10 @@ internal object DriveSurfaceStore {
     return runCatching { JSONObject(value) }.getOrNull()
   }
 
+  fun readMap(context: Context): Map<String, Any?>? {
+    return read(context)?.let(::jsonObjectToMap)
+  }
+
   fun isSessionActive(context: Context): Boolean {
     return context.getSharedPreferences(DRIVE_SURFACE_PREFS, Context.MODE_PRIVATE)
       .getBoolean(DRIVE_SURFACE_SESSION_ACTIVE_KEY, false)

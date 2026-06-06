@@ -192,6 +192,12 @@ For simulator/emulator testing, use one of the built-in drive paths:
 
 - The native engine is foreground-first until a trip starts. During a user-started active trip, native live sessions may keep collectors running for widgets, Live Activity, and the Android active-trip notification.
 - Widgets do not passively start GPS. Start a trip in the app first; save/stop the trip to end live surface tracking.
+- CarPlay/Android Auto currently include simulator-only car surfaces that read
+  active-trip snapshots. iOS debug builds try a full-screen native `CPWindow`
+  cockpit dashboard first and keep a template fallback because `CPMapTemplate`
+  crashes `CarPlayTemplateUIHost` on the current simulator runtime. Android Auto
+  keeps the `react-native-carplay` DHU cockpit POC. Neither is production
+  entitlement/category approval.
 - Expo Go is not a target for the native engine; use an iOS or Android development build so the local Expo Module is compiled into the app.
 - The C++ core prefers valid native GPS speed, falls back to distance/time, rejects poor or outlier GPS, predicts between GPS fixes with IMU input, and decays to `0` after stale GPS.
 - The compass prefers GPS course while moving, falls back to device heading when stopped/slow, and requires precise foreground location. Coarse/approximate location shows a precise-location-required state.

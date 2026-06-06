@@ -384,9 +384,12 @@ active-trip tracking in the background. On Android, live widgets need precise
 location and the active-trip notification; some devices may also ask for
 background location so tracking can continue when V3l0city is not visible.
 
-CarPlay support starts through iPhone widgets and Live Activities. Full CarPlay
-and Android Auto dashboards depend on Apple and Google car-app rules and are not
-available in this version.
+CarPlay support starts through iPhone widgets and Live Activities. Development
+builds also include an experimental simulator-only CarPlay cockpit dashboard
+with speed, trip stats, heading, elapsed time, and signal. Start or stop the
+trip from the phone; the CarPlay screen mirrors the active trip. Android Auto
+testing remains experimental through the simulator/DHU path. These are for
+testing the car-surface idea, not production-approved car dashboards yet.
 
 ## Privacy and Data
 

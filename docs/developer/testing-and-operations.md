@@ -270,6 +270,38 @@ Moving samples should show `headingSource=course`; stopped or slow samples
 should show `headingSource=device` when rotation-vector data is available, or
 `none` when the simulator has no usable compass fallback.
 
+## Car-Surface Simulator POC
+
+V3l0city includes experimental car surfaces for simulators only. iOS debug
+builds use an experimental full-screen native `CPWindow` dashboard that reads
+the same app-group `DriveSurfaceSnapshot` as widgets. It does not mount a
+second React Native root inside CarPlay and avoids `CPMapTemplate`, which
+currently crashes the simulator host in the map-template share-button path.
+A stable template fallback remains available for runtimes that refuse the
+custom window path. Release builds keep the safer information-template summary
+unless the car-app entitlement/category path is approved. Android Auto/DHU keeps
+the `react-native-carplay` rich surface POC with a matching display-only
+cockpit layout.
+
+iOS:
+
+1. Run `npm run ios`.
+2. In Simulator, open **I/O > External Displays > CarPlay**.
+3. Start a trip in V3l0city on the phone. The CarPlay surface should show the
+   cockpit dashboard and mirror active speed, stats, heading, elapsed time, and
+   signal at about 1 Hz.
+
+Android:
+
+1. Make sure Java 17 is available, then build/install with `npm run android`.
+2. Open Android Auto Desktop Head Unit.
+3. Start a trip in V3l0city on the phone. The DHU surface should show active
+   trip values without extra app header text or car-screen trip controls.
+
+The POC is not production entitlement/category approval. Widgets and Live
+Activity remain the supported car/glance path until V3l0city has an approved
+full car-app category.
+
 ## Environment Variables
 
 ### Mobile Telemetry

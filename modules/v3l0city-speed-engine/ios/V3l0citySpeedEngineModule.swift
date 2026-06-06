@@ -93,6 +93,10 @@ public final class V3l0citySpeedEngineModule: Module {
       self.clearDriveSurfaceSnapshot()
     }
 
+    AsyncFunction("readDriveSurfaceSnapshot") { () -> [String: Any]? in
+      self.readDriveSurfaceSnapshot()
+    }
+
     AsyncFunction("startLiveDriveSession") { (snapshot: [String: Any]) in
       self.startLiveDriveSession(snapshot)
     }
@@ -406,6 +410,19 @@ public final class V3l0citySpeedEngineModule: Module {
     defaults.synchronize()
 
     requestWidgetReload(force: true)
+  }
+
+  private func readDriveSurfaceSnapshot() -> [String: Any]? {
+    guard
+      let json = v3l0cityDriveSurfaceDefaults().string(forKey: v3l0cityDriveSurfaceSnapshotKey),
+      let data = json.data(using: .utf8),
+      let object = try? JSONSerialization.jsonObject(with: data),
+      let snapshot = object as? [String: Any]
+    else {
+      return nil
+    }
+
+    return snapshot
   }
 
   private func startLiveDriveSession(_ snapshot: [String: Any]) {
