@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<automotiveApp>
-  <!-- Simulator POC only: lets Android Auto/DHU discover the template app. -->
-  <uses name="template" />
-</automotiveApp>

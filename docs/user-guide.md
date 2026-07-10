@@ -361,8 +361,8 @@ V3l0city can show a small speed/trip glance outside the main app:
 - iPhone Live Activities are the real-time surface for active-trip speed,
   distance, max speed, elapsed time, compass heading, and signal status.
 - iPhone home-screen widgets show the latest active-trip state, but iOS may
-  pause widget refreshes. If you need live speed with the phone locked or in
-  CarPlay, use the Live Activity.
+  pause widget refreshes. If you need live speed with the phone locked, use the
+  Live Activity.
 - Android home-screen widgets show the same active-trip information and resize
   between compact, medium, and expanded layouts while the active-trip
   notification is running. Larger sizes show a speed dial, stats, compass, time,
@@ -384,12 +384,10 @@ active-trip tracking in the background. On Android, live widgets need precise
 location and the active-trip notification; some devices may also ask for
 background location so tracking can continue when V3l0city is not visible.
 
-CarPlay support starts through iPhone widgets and Live Activities. Development
-builds also include an experimental simulator-only CarPlay cockpit dashboard
-with speed, trip stats, heading, elapsed time, and signal. Start or stop the
-trip from the phone; the CarPlay screen mirrors the active trip. Android Auto
-testing remains experimental through the simulator/DHU path. These are for
-testing the car-surface idea, not production-approved car dashboards yet.
+CarPlay and Android Auto dashboards are not part of the v1.0.0 production
+release. For v1, use iPhone Live Activities, iPhone widgets, Android widgets,
+and the Android active-trip notification for glanceable speed and trip status
+outside the main app.
 
 ## Privacy and Data
 

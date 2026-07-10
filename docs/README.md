@@ -24,7 +24,7 @@ Start here if you are deciding which guide to read.
   simulator flows, environment variables, and troubleshooting.
 - [Widgets and car surfaces](developer/widgets-and-car-surfaces.md): live drive
   sessions, iOS Live Activity/widget behavior, Android widget variants, and the
-  CarPlay/Android Auto simulator POC.
+  dormant CarPlay/Android Auto POC kept out of v1.0.0 production builds.
 - [Code ownership map](developer/code-ownership.md): where to make changes and
   what to validate.
 - [Native speed engine](speed-engine.md): deeper details on iOS/Android sensor

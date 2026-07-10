@@ -85,27 +85,20 @@ The production-oriented car glance path is still iOS Live Activity/widgets and
 Android widgets/active-trip notification. These surfaces are active-trip only
 and read the same native live-drive state as the phone dashboard.
 
-There are also simulator POCs for car surfaces:
+CarPlay and Android Auto are excluded from v1.0.0 production binaries:
 
-- iOS uses scene-based CarPlay setup, a debug-only CarPlay maps entitlement,
-  and an experimental full-screen native `CPWindow` dashboard in debug builds.
-  The dashboard reads the app-group `DriveSurfaceSnapshot` directly at about
-  1 Hz and updates UIKit labels/layers in place. It deliberately does not mount
-  a second React Native root inside CarPlay. It also avoids `CPMapTemplate`
-  because the current simulator runtime crashes `CarPlayTemplateUIHost` inside
-  the map-template share-button path. A `CPListTemplate`/`CPInformationTemplate`
-  fallback remains available for simulator runtimes that refuse the custom
-  window path. Release builds keep the safer `CPInformationTemplate` summary
-  unless an explicit production entitlement/category decision is made.
-- Android advertises a template app for Android Auto/DHU and keeps the
-  `react-native-carplay@2.4.1-beta.0` rich surface POC. The Android Auto
-  dashboard is also display-only and uses the same fullscreen cockpit hierarchy
-  as the iOS debug surface.
-- Car surfaces are display-only in this POC. Start, pause, resume, and save
-  trips from the phone dashboard; the car dashboard mirrors speed,
-  AVG/MAX/DIST, heading, elapsed time, and signal.
-- Release builds should keep the safer/non-car-approved paths unless explicit
-  entitlement/category approval is in place.
+- iOS does not declare a `CPTemplateApplicationSceneSessionRoleApplication`
+  scene in the active app config.
+- Android does not declare `com.google.android.gms.car.application` metadata.
+- `index.js` does not register car surfaces at startup.
+- `react-native-carplay` native autolinking is disabled in
+  `react-native.config.js`, so its Pods, Android car service, template
+  permissions, and Android Auto manifest entries are not linked into store
+  builds.
+
+The simulator POC source remains in `src/car/` and dormant native code remains
+behind the disabled `V3L0CITY_CAR_SURFACE_POC` Swift compile flag. Re-enable it
+only after a deliberate CarPlay/Android Auto entitlement/category decision.
 
 This POC is not App Store or Play Store approval by itself. Full production
 CarPlay and Android Auto remain gated by Apple/Google category, entitlement,
@@ -119,6 +112,6 @@ production car-app feature.
 - `npm run lint`
 - `npx jest --runInBand __tests__/driveSurfaceSnapshot.test.ts`
 - iOS simulator widget gallery and Live Activity simulator checks
-- iOS Simulator: `I/O > External Displays > CarPlay` for the template POC
 - Android launcher widget picker and active-trip notification checks
-- Android Desktop Head Unit for the Android Auto template POC
+- Verify release builds do not contain iOS CarPlay scene keys or Android Auto
+  car-service metadata.

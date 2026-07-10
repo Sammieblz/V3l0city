@@ -1,4 +1,6 @@
+#if V3L0CITY_CAR_SURFACE_POC
 import CarPlay
+#endif
 import Expo
 import React
 import ReactAppDependencyProvider
@@ -32,12 +34,14 @@ public class AppDelegate: ExpoAppDelegate {
     configurationForConnecting connectingSceneSession: UISceneSession,
     options: UIScene.ConnectionOptions
   ) -> UISceneConfiguration {
+#if V3L0CITY_CAR_SURFACE_POC
     if connectingSceneSession.role.rawValue == "CPTemplateApplicationSceneSessionRoleApplication" {
       NSLog("[V3l0city][car] selecting CarPlay scene configuration")
       return UISceneConfiguration(
         name: "CarPlay Configuration",
         sessionRole: connectingSceneSession.role)
     }
+#endif
 
     return UISceneConfiguration(
       name: "Default Configuration",
@@ -107,6 +111,7 @@ class PhoneSceneDelegate: UIResponder, UIWindowSceneDelegate {
   }
 }
 
+#if V3L0CITY_CAR_SURFACE_POC
 private enum V3l0cityCarSurfaceMode {
   case fullscreen
   case template
@@ -982,6 +987,7 @@ private final class V3l0cityCarCompassView: UIView {
       withAttributes: attributes)
   }
 }
+#endif
 
 class ReactNativeDelegate: ExpoReactNativeFactoryDelegate {
   // Extension point for config-plugins

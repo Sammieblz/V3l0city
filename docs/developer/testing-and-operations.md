@@ -270,37 +270,45 @@ Moving samples should show `headingSource=course`; stopped or slow samples
 should show `headingSource=device` when rotation-vector data is available, or
 `none` when the simulator has no usable compass fallback.
 
-## Car-Surface Simulator POC
+## v1.0.0 Release Readiness
 
-V3l0city includes experimental car surfaces for simulators only. iOS debug
-builds use an experimental full-screen native `CPWindow` dashboard that reads
-the same app-group `DriveSurfaceSnapshot` as widgets. It does not mount a
-second React Native root inside CarPlay and avoids `CPMapTemplate`, which
-currently crashes the simulator host in the map-template share-button path.
-A stable template fallback remains available for runtimes that refuse the
-custom window path. Release builds keep the safer information-template summary
-unless the car-app entitlement/category path is approved. Android Auto/DHU keeps
-the `react-native-carplay` rich surface POC with a matching display-only
-cockpit layout.
+V3l0city v1.0.0 excludes CarPlay and Android Auto from production binaries.
+Widgets, iOS Live Activity, Android widgets, and the Android active-trip
+notification are the supported car/glance surfaces for this release.
 
-iOS:
+Before submitting store builds, verify:
 
-1. Run `npm run ios`.
-2. In Simulator, open **I/O > External Displays > CarPlay**.
-3. Start a trip in V3l0city on the phone. The CarPlay surface should show the
-   cockpit dashboard and mirror active speed, stats, heading, elapsed time, and
-   signal at about 1 Hz.
+- Built iOS `Info.plist` does not contain
+  `CPTemplateApplicationSceneSessionRoleApplication`.
+- Release entitlements do not contain `com.apple.developer.carplay-maps`.
+- Merged Android manifest does not contain
+  `com.google.android.gms.car.application`, `androidx.car.app.CarAppService`,
+  `NAVIGATION_TEMPLATES`, `MAP_TEMPLATES`, or `ACCESS_SURFACE`.
+- `react-native-carplay` remains disabled in `react-native.config.js`.
 
-Android:
+Store checklist:
 
-1. Make sure Java 17 is available, then build/install with `npm run android`.
-2. Open Android Auto Desktop Head Unit.
-3. Start a trip in V3l0city on the phone. The DHU surface should show active
-   trip values without extra app header text or car-screen trip controls.
+- App Store Connect privacy labels disclose account/profile data, optional
+  cloud sync, coarse nearby discovery, trip aggregates, location use, push
+  tokens, and diagnostics/telemetry if enabled.
+- Google Play Data Safety matches the same data inventory.
+- Google Play foreground service declaration explains user-started active-trip
+  speed tracking and the active-trip notification.
+- Google Play background location declaration explains that background location
+  is used only during user-started active trips for live widgets/notifications
+  and stops when the trip is saved.
+- Supabase migrations and Edge Functions are deployed before testing account,
+  backup, friends, nearby, and leaderboards.
+- Production EAS environment values are configured outside git.
 
-The POC is not production entitlement/category approval. Widgets and Live
-Activity remain the supported car/glance path until V3l0city has an approved
-full car-app category.
+Manual release QA:
+
+- Offline first install, local trip save, draft recovery, JSON export/import.
+- iOS widgets and Live Activity during an active trip.
+- Android widget and active-trip foreground notification.
+- Supabase sign-up/sign-in, backup, restore, friends, nearby, leaderboards.
+- Permission flows for denied, approximate, foreground-only, and background
+  location states.
 
 ## Environment Variables
 

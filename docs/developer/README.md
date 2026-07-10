@@ -23,7 +23,8 @@ by subsystem rather than by chronology.
   aggregate leaderboards.
 - [Widgets and Car Surfaces](widgets-and-car-surfaces.md): native live drive
   sessions, iOS WidgetKit/Live Activity support, Android home-screen widgets,
-  simulated drive surfaces, and the CarPlay/Android Auto simulator POC.
+  simulated drive surfaces, and the dormant CarPlay/Android Auto POC excluded
+  from v1.0.0 production builds.
 - [Testing and Operations](testing-and-operations.md): validation commands,
   simulator workflows, native builds, environment variables, and troubleshooting.
 - [Code Ownership Map](code-ownership.md): where to make changes by feature
