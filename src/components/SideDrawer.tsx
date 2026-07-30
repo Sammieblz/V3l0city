@@ -26,6 +26,7 @@ import {
   radii,
   spacing,
 } from '../theme/paperTheme';
+import { useThemedStyles } from '../theme/appTheme';
 
 type DrawerItem = {
   key: string;
@@ -62,6 +63,7 @@ const SideDrawer: React.FC<Props> = ({
   accountSummary,
   onDismiss,
 }) => {
+  const styles = useThemedStyles(createStyles);
   const [mounted, setMounted] = useState(visible);
   const [activeGroupKey, setActiveGroupKey] = useState<string | null>(null);
   const progress = useSharedValue(0);
@@ -271,7 +273,7 @@ const SideDrawer: React.FC<Props> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = () => StyleSheet.create({
   root: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 100,

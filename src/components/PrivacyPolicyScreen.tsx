@@ -6,32 +6,39 @@ import {
   PRIVACY_POLICY_UPDATED_AT,
 } from '../content/privacyPolicy';
 import { colors, fontFamilies, radii, spacing } from '../theme/paperTheme';
+import { useThemedStyles } from '../theme/appTheme';
 
-const PrivacyPolicyScreen: React.FC = () => (
-  <ScrollView
-    contentContainerStyle={styles.content}
-    showsVerticalScrollIndicator={false}
-  >
-    <View style={styles.hero}>
-      <Text style={styles.eyebrow}>Privacy Policy</Text>
-      <Text style={styles.title}>Your data stays yours first.</Text>
-      <Text style={styles.updated}>Last updated {PRIVACY_POLICY_UPDATED_AT}</Text>
-    </View>
+const PrivacyPolicyScreen: React.FC = () => {
+  const styles = useThemedStyles(createStyles);
 
-    {PRIVACY_POLICY_SECTIONS.map((section) => (
-      <View key={section.title} style={styles.panel}>
-        <Text style={styles.sectionTitle}>{section.title}</Text>
-        {section.body.map((paragraph) => (
-          <Text key={paragraph} style={styles.body}>
-            {paragraph}
-          </Text>
-        ))}
+  return (
+    <ScrollView
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={styles.hero}>
+        <Text style={styles.eyebrow}>Privacy Policy</Text>
+        <Text style={styles.title}>Your data stays yours first.</Text>
+        <Text style={styles.updated}>
+          Last updated {PRIVACY_POLICY_UPDATED_AT}
+        </Text>
       </View>
-    ))}
-  </ScrollView>
-);
 
-const styles = StyleSheet.create({
+      {PRIVACY_POLICY_SECTIONS.map((section) => (
+        <View key={section.title} style={styles.panel}>
+          <Text style={styles.sectionTitle}>{section.title}</Text>
+          {section.body.map((paragraph) => (
+            <Text key={paragraph} style={styles.body}>
+              {paragraph}
+            </Text>
+          ))}
+        </View>
+      ))}
+    </ScrollView>
+  );
+};
+
+const createStyles = () => StyleSheet.create({
   content: {
     gap: spacing.md,
     padding: spacing.md,

@@ -8,6 +8,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { colors, fontFamilies, motion } from '../theme/paperTheme';
+import { useThemedStyles } from '../theme/appTheme';
 import {
   isUsableHeading,
   normalizeHeading,
@@ -43,6 +44,7 @@ const MiniCompass: React.FC<MiniCompassProps> = ({
   headingSource,
   headingQuality = 'poor',
 }) => {
+  const styles = useThemedStyles(createStyles);
   const center = size / 2;
   const radius = size / 2 - size * 0.1;
   const hasHeading = headingAvailable && isUsableHeading(heading);
@@ -217,7 +219,7 @@ const MiniCompass: React.FC<MiniCompassProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = () => StyleSheet.create({
   container: {
     alignItems: 'center',
     justifyContent: 'flex-start',

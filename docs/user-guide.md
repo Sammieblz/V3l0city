@@ -186,6 +186,15 @@ available.
 
 Open **Menu > Settings**.
 
+### Appearance
+
+Choose **System**, **Light**, or **Dark**.
+
+**System** follows the appearance selected for your iPhone or Android device.
+V3l0city does not need location, notification, motion, or any additional
+permission to read this setting. Your choice is saved only on this device and
+continues to work when you use the app offline or before signing in.
+
 ### Units
 
 Choose:

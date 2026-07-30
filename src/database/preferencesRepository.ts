@@ -2,6 +2,7 @@ import type { Units } from '../utils/speedMath';
 import { getDatabase } from './database';
 
 export type OrientationMode = 'portrait' | 'landscape' | 'auto';
+export type ThemePreference = 'system' | 'light' | 'dark';
 
 export type Preferences = {
   units: Units;
@@ -9,6 +10,7 @@ export type Preferences = {
   autoStart: boolean;
   autoSave: boolean;
   orientationMode: OrientationMode;
+  themePreference: ThemePreference;
 };
 
 type PreferencesRow = {
@@ -18,7 +20,11 @@ type PreferencesRow = {
   auto_start: number;
   auto_save: number;
   orientation_mode: string;
+  theme_preference?: string;
 };
+
+const themePreferenceFrom = (value: string | undefined): ThemePreference =>
+  value === 'light' || value === 'dark' ? value : 'system';
 
 export const getPreferences = async (): Promise<Preferences | null> => {
   try {
@@ -33,6 +39,7 @@ export const getPreferences = async (): Promise<Preferences | null> => {
       autoStart: row.auto_start === 1,
       autoSave: row.auto_save === 1,
       orientationMode: row.orientation_mode as OrientationMode,
+      themePreference: themePreferenceFrom(row.theme_preference),
     };
   } catch {
     return null;
@@ -47,12 +54,14 @@ export const savePreferences = async (prefs: Preferences): Promise<void> => {
       mount_index = ?,
       auto_start = ?,
       auto_save = ?,
-      orientation_mode = ?
+      orientation_mode = ?,
+      theme_preference = ?
     WHERE id = 1`,
     prefs.units,
     prefs.mountIndex,
     prefs.autoStart ? 1 : 0,
     prefs.autoSave ? 1 : 0,
-    prefs.orientationMode
+    prefs.orientationMode,
+    prefs.themePreference
   );
 };

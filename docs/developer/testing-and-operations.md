@@ -35,6 +35,18 @@ Web:
 npm run web
 ```
 
+The independent public Next.js site is run and validated from `web/`:
+
+```bash
+cd web
+npm run dev
+npm run lint
+npm run typecheck
+npm run test
+npm run build
+npm run test:e2e
+```
+
 The native speed engine is not available in Expo Go. Use development builds for
 iOS and Android speed-engine testing.
 
@@ -120,6 +132,7 @@ Covers:
 - precise-location-required status mapping
 - telemetry API/client behavior
 - export formatting
+- persisted appearance-preference behavior
 
 ### C++ Speed Engine
 

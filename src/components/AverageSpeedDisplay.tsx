@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { colors, fontFamilies } from '../theme/paperTheme';
+import { useThemedStyles } from '../theme/appTheme';
 
 interface AverageSpeedDisplayProps {
   averageSpeed: number;
@@ -10,15 +11,19 @@ interface AverageSpeedDisplayProps {
 const AverageSpeedDisplay: React.FC<AverageSpeedDisplayProps> = ({
   averageSpeed,
   unitLabel,
-}) => (
-  <View>
-    <Text style={styles.label}>AVG</Text>
-    <Text style={styles.value}>{Math.round(averageSpeed)}</Text>
-    {unitLabel ? <Text style={styles.unit}>{unitLabel}</Text> : null}
-  </View>
-);
+}) => {
+  const styles = useThemedStyles(createStyles);
 
-const styles = StyleSheet.create({
+  return (
+    <View>
+      <Text style={styles.label}>AVG</Text>
+      <Text style={styles.value}>{Math.round(averageSpeed)}</Text>
+      {unitLabel ? <Text style={styles.unit}>{unitLabel}</Text> : null}
+    </View>
+  );
+};
+
+const createStyles = () => StyleSheet.create({
   label: {
     color: colors.textMuted,
     fontFamily: fontFamilies.bodySemiBold,

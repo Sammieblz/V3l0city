@@ -8,6 +8,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { colors, fontFamilies, motion, spacing } from '../theme/paperTheme';
+import { useThemedStyles } from '../theme/appTheme';
 import {
   isUsableHeading,
   normalizeHeading,
@@ -52,6 +53,7 @@ const HorizontalCompass: React.FC<HorizontalCompassProps> = ({
   headingSource,
   headingQuality = 'poor',
 }) => {
+  const styles = useThemedStyles(createStyles);
   const hasHeading = headingAvailable && isUsableHeading(heading);
   const displayHeading = hasHeading ? normalizeHeading(heading) : 0;
   const pxPerDegree = width / DEGREES_VISIBLE;
@@ -209,7 +211,7 @@ const HorizontalCompass: React.FC<HorizontalCompassProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = () => StyleSheet.create({
   container: {
     alignItems: 'center',
     width: '100%',

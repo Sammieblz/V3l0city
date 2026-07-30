@@ -15,8 +15,10 @@ Responsibilities:
 - Initialize SQLite through `initDatabase()`.
 - Render nothing until storage is ready.
 - Mount `SafeAreaProvider`.
-- Mount the React Native Paper theme provider.
-- Configure the Expo status bar.
+- Resolve the persisted System/Light/Dark preference against the platform color
+  scheme, then mount the matching React Native Paper theme provider.
+- Configure the Expo status bar and system background to match the resolved
+  appearance.
 - Render `Speedometer`.
 
 The app keeps shared code in `src/` so Expo Router does not treat helpers,
@@ -217,6 +219,19 @@ Values:
 
 Display conversion is handled by `src/utils/speedMath.ts`.
 
+### Appearance
+
+Values:
+
+- `system` (default)
+- `light`
+- `dark`
+
+`system` follows the iOS or Android color scheme. Reading that value requires
+no runtime permission. The preference is stored locally in SQLite and applies
+whether the user is offline, signed out, or signed in; it is not sent through
+cloud profile or trip sync.
+
 ### Mount Position
 
 Values:
@@ -291,6 +306,7 @@ They are saved whenever the relevant state changes:
 - auto start
 - auto save
 - orientation mode
+- appearance mode
 
 The preferences repository writes to the single-row `preferences` SQLite table.
 

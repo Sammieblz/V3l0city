@@ -38,6 +38,22 @@ Android development builds for real speed-engine testing.
 
 Expo Router screens live in `app/`. Shared application code lives in `src/` so Expo Router does not treat helpers, hooks, storage, and API clients as routes.
 
+## Public Web Project
+
+The public Next.js site and browser simulator live independently in
+[`web/`](web/README.md). It is not the Expo Web command (`npm run web`). Start
+it from its own project directory:
+
+```bash
+cd web
+npm run dev
+```
+
+The public site follows the visitor's browser light/dark preference by default.
+Its landing-page appearance control can override that choice for every Next.js
+route using browser-local storage. Reading the browser preference and storing
+that choice do not request a browser permission.
+
 ## iOS development build
 
 This project now includes a generated native iOS project under `ios/`.

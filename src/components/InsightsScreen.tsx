@@ -38,6 +38,7 @@ import {
 } from '../utils/insightsAnalytics';
 import type { TripWithSpeedSamples } from '../domain/trip';
 import { colors, fontFamilies, motion, radii, spacing } from '../theme/paperTheme';
+import { useThemedStyles } from '../theme/appTheme';
 import type { Units } from '../utils/speedMath';
 
 type Props = {
@@ -484,6 +485,7 @@ export const InsightsContent: React.FC<ContentProps> = ({
   units,
   loading = false,
 }) => {
+  styles = useThemedStyles(createStyles);
   const { width } = useWindowDimensions();
   const reducedMotion = useReducedMotionPreference();
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
@@ -696,7 +698,7 @@ const InsightsScreen: React.FC<Props> = ({ units }) => {
   return <InsightsContent trips={trips} units={units} loading={loading} />;
 };
 
-const styles = StyleSheet.create({
+const createStyles = () => StyleSheet.create({
   centerState: {
     alignItems: 'center',
     flex: 1,
@@ -926,5 +928,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 });
+
+let styles = createStyles();
 
 export default InsightsScreen;

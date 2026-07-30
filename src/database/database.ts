@@ -25,7 +25,8 @@ const createTables = (database: SQLite.SQLiteDatabase): void => {
       mount_index INTEGER NOT NULL DEFAULT 0,
       auto_start INTEGER NOT NULL DEFAULT 0,
       auto_save INTEGER NOT NULL DEFAULT 0,
-      orientation_mode TEXT NOT NULL DEFAULT 'portrait'
+      orientation_mode TEXT NOT NULL DEFAULT 'portrait',
+      theme_preference TEXT NOT NULL DEFAULT 'system'
     );
     INSERT OR IGNORE INTO preferences (id) VALUES (1);
 
@@ -225,6 +226,12 @@ const runMigrations = (database: SQLite.SQLiteDatabase): void => {
     'upload_error',
     'upload_error TEXT'
   );
+  addColumnIfMissing(
+    database,
+    'preferences',
+    'theme_preference',
+    "theme_preference TEXT NOT NULL DEFAULT 'system'"
+  );
   database.runSync(
     'INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES (?, ?)',
     '2026-05-19-trip-speed-sample-telemetry',
@@ -238,6 +245,11 @@ const runMigrations = (database: SQLite.SQLiteDatabase): void => {
   database.runSync(
     'INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES (?, ?)',
     '2026-05-27-offline-cloud-sync',
+    new Date().toISOString()
+  );
+  database.runSync(
+    'INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES (?, ?)',
+    '2026-07-29-theme-preference',
     new Date().toISOString()
   );
 };
@@ -263,13 +275,17 @@ const migrateFromAsyncStorage = async (
             mount_index = ?,
             auto_start = ?,
             auto_save = ?,
-            orientation_mode = ?
+            orientation_mode = ?,
+            theme_preference = ?
           WHERE id = 1`,
           p.units,
           p.mountIndex,
           p.autoStart ? 1 : 0,
           p.autoSave ? 1 : 0,
-          p.orientationMode ?? 'portrait'
+          p.orientationMode ?? 'portrait',
+          p.themePreference === 'light' || p.themePreference === 'dark'
+            ? p.themePreference
+            : 'system'
         );
       }
       await AsyncStorage.removeItem(LEGACY_PREFS_KEY);

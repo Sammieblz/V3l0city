@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { colors, fontFamilies } from '../theme/paperTheme';
+import { useThemedStyles } from '../theme/appTheme';
 
 interface CompassProps {
   heading: number | null;
@@ -13,6 +14,7 @@ const getCardinalDirection = (heading: number): string => {
 };
 
 const Compass: React.FC<CompassProps> = ({ heading }) => {
+  const styles = useThemedStyles(createStyles);
   const hasHeading = heading != null && !Number.isNaN(heading);
   const displayHeading = hasHeading ? heading : 0;
   const direction = hasHeading ? getCardinalDirection(displayHeading) : '--';
@@ -37,7 +39,7 @@ const Compass: React.FC<CompassProps> = ({ heading }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = () => StyleSheet.create({
   container: {
     marginTop: 24,
     alignItems: 'center',

@@ -242,6 +242,7 @@ const StaticCarCompass: React.FC<{
 };
 
 const CarDashboardSurface: React.FC = () => {
+  styles = createStyles();
   const { width, height } = useWindowDimensions();
   const [snapshot, setSnapshot] = useState<DriveSurfaceSnapshot | null>(null);
   const [controllerStatus, setControllerStatus] = useState<CarTripControllerStatus>(
@@ -405,7 +406,7 @@ const CarDashboardSurface: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = () => StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.background,
@@ -581,5 +582,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
+
+let styles = createStyles();
 
 export default CarDashboardSurface;

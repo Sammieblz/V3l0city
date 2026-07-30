@@ -14,6 +14,7 @@ import type {
   LeaderboardEntry,
 } from '../cloud/types';
 import { colors, fontFamilies, radii, spacing } from '../theme/paperTheme';
+import { useThemedStyles } from '../theme/appTheme';
 import {
   displayDistance,
   displaySpeed,
@@ -69,6 +70,7 @@ const emptyMessageFor = (
 };
 
 const LeaderboardsScreen: React.FC<Props> = ({ units }) => {
+  styles = useThemedStyles(createStyles);
   const [session, setSession] = useState<CloudAuthSession | null>(null);
   const [profile, setProfile] = useState<CloudProfile | null>(null);
   const [scope, setScope] = useState<Scope>('friends');
@@ -236,7 +238,7 @@ const Gate: React.FC<{ title: string; body: string }> = ({ title, body }) => (
   </View>
 );
 
-const styles = StyleSheet.create({
+const createStyles = () => StyleSheet.create({
   content: {
     gap: spacing.md,
     padding: spacing.md,
@@ -346,5 +348,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
 });
+
+let styles = createStyles();
 
 export default LeaderboardsScreen;

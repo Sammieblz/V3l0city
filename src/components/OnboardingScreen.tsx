@@ -4,6 +4,7 @@ import { Button } from 'react-native-paper';
 
 import BrandMark from './BrandMark';
 import { colors, fontFamilies, radii, spacing } from '../theme/paperTheme';
+import { useThemedStyles } from '../theme/appTheme';
 
 type OnboardingScreenProps = {
   cloudConfigured: boolean;
@@ -19,11 +20,14 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   onSignIn,
   onSignUp,
   onOpenPrivacy,
-}) => (
-  <ScrollView
-    contentContainerStyle={styles.content}
-    showsVerticalScrollIndicator={false}
-  >
+}) => {
+  const styles = useThemedStyles(createStyles);
+
+  return (
+    <ScrollView
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
     <View style={styles.hero}>
       <BrandMark size={74} style={styles.heroMark} />
       <Text style={styles.eyebrow}>Welcome to V3l0city</Text>
@@ -57,10 +61,11 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         </Text>
       )}
     </View>
-  </ScrollView>
-);
+    </ScrollView>
+  );
+};
 
-const styles = StyleSheet.create({
+const createStyles = () => StyleSheet.create({
   content: {
     gap: spacing.md,
     padding: spacing.md,
