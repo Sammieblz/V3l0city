@@ -105,6 +105,12 @@ Supabase Auth, Postgres, RLS, Edge Functions
 - Expo SecureStore for Supabase auth session persistence.
 - AsyncStorage for non-secret install flags such as first-install onboarding.
 
+The shell resolves its appearance from a local `System`, `Light`, or `Dark`
+preference. The value is stored in the same SQLite preferences row as the
+offline dashboard choices, so it applies before and after account sign-in and
+is not a cloud-synced profile setting. `System` reads the platform color scheme
+without a runtime permission.
+
 The live compass is a vehicle-direction compass. The native engine prefers GPS
 course while moving, uses device heading when stopped/slow, and marks the
 heading source and quality for UI, storage, export, and telemetry.
@@ -136,6 +142,18 @@ heading source and quality for UI, storage, export, and telemetry.
 - Supabase Edge Functions for authenticated sync and social operations.
 - Provider-neutral TypeScript interfaces in the mobile app so Supabase can be
   replaced later.
+
+### Public Web
+
+- A separate Next.js App Router project in `web/`, deployed independently from
+  the Expo app.
+- Browser-local IndexedDB for web trip data and browser storage for the public
+  appearance preference.
+- The public landing site exposes the only web appearance control; its saved
+  preference applies to every Next.js route. `System` follows
+  `prefers-color-scheme`.
+- No browser permission, account state, trip data, or analytics input is used
+  to determine the appearance mode.
 
 ## Repository Layout
 
@@ -180,6 +198,10 @@ docs/
   speed-engine.md
   telemetry-api.md
   user-guide.md
+
+web/
+  README.md
+  src/
 ```
 
 ## Boot Flow

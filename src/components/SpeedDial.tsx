@@ -8,6 +8,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { colors, fontFamilies, motion } from '../theme/paperTheme';
+import { useThemedStyles } from '../theme/appTheme';
 
 interface SpeedDialProps {
   speed: number;
@@ -53,6 +54,7 @@ const SpeedDial: React.FC<SpeedDialProps> = ({
   units,
   size = 260,
 }) => {
+  const styles = useThemedStyles(createStyles);
   const center = size / 2;
   const radius = size / 2 - size * 0.077;
   const strokeWidth = Math.max(2.5, size * 0.012);
@@ -159,7 +161,7 @@ const SpeedDial: React.FC<SpeedDialProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = () => StyleSheet.create({
   container: {
     alignItems: 'center',
     justifyContent: 'center',

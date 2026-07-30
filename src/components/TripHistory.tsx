@@ -2,6 +2,7 @@ import React from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { Button, Card } from 'react-native-paper';
 import { colors, fontFamilies } from '../theme/paperTheme';
+import { useThemedStyles } from '../theme/appTheme';
 import type { Trip } from '../domain/trip';
 
 type Props = {
@@ -10,6 +11,7 @@ type Props = {
 };
 
 const TripHistory: React.FC<Props> = ({ trips, onClear }) => {
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
@@ -110,7 +112,7 @@ const TripHistory: React.FC<Props> = ({ trips, onClear }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = () => StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 16,

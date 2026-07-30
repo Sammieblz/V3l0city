@@ -52,6 +52,7 @@ describe('exportService trip speed samples', () => {
         autoStart: false,
         autoSave: false,
         orientationMode: 'portrait',
+        themePreference: 'system',
       },
       [{ ...trip, speedSamples: [sample] }]
     );
@@ -81,6 +82,7 @@ describe('exportService trip speed samples', () => {
           autoStart: true,
           autoSave: false,
           orientationMode: 'auto',
+          themePreference: 'light',
         },
         [{ ...trip, speedSamples: [sample] }]
       )

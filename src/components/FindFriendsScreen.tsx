@@ -12,6 +12,7 @@ import type {
 } from '../cloud/types';
 import { getCoarseLocation } from '../cloud/utils/coarseLocation';
 import { colors, fontFamilies, radii, spacing } from '../theme/paperTheme';
+import { useThemedStyles } from '../theme/appTheme';
 import {
   displayDistance,
   displaySpeed,
@@ -58,6 +59,7 @@ const relationshipCopy = (relationship: FriendProfile['relationship']) => {
 };
 
 const FindFriendsScreen: React.FC<Props> = ({ units }) => {
+  styles = useThemedStyles(createStyles);
   const [session, setSession] = useState<CloudAuthSession | null>(null);
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState<FriendProfile[]>([]);
@@ -483,7 +485,7 @@ const Gate: React.FC<{ title: string; body: string }> = ({ title, body }) => (
   </View>
 );
 
-const styles = StyleSheet.create({
+const createStyles = () => StyleSheet.create({
   content: {
     gap: spacing.md,
     padding: spacing.md,
@@ -667,5 +669,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
 });
+
+let styles = createStyles();
 
 export default FindFriendsScreen;

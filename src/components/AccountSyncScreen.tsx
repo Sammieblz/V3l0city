@@ -15,6 +15,7 @@ import type { CloudAuthSession, CloudProfile } from '../cloud/types';
 import { getCoarseLocation } from '../cloud/utils/coarseLocation';
 import { getPendingSyncChangeCount } from '../database/tripRepository';
 import { colors, fontFamilies, radii, spacing } from '../theme/paperTheme';
+import { useThemedStyles } from '../theme/appTheme';
 import { logAppWarning } from '../utils/logging';
 import { getUserFacingErrorMessage } from '../utils/userFacingErrors';
 
@@ -41,6 +42,7 @@ const AccountSyncScreen: React.FC<AccountSyncScreenProps> = ({
   onAccountChanged,
   onOpenPrivacy,
 }) => {
+  styles = useThemedStyles(createStyles);
   const [session, setSession] = useState<CloudAuthSession | null>(null);
   const [profile, setProfile] = useState<CloudProfile | null>(null);
   const [step, setStep] = useState<AccountStep>(
@@ -683,7 +685,7 @@ const SettingToggle: React.FC<{
   </View>
 );
 
-const styles = StyleSheet.create({
+const createStyles = () => StyleSheet.create({
   content: {
     gap: spacing.md,
     padding: spacing.md,
@@ -794,5 +796,7 @@ const styles = StyleSheet.create({
     maxWidth: 220,
   },
 });
+
+let styles = createStyles();
 
 export default AccountSyncScreen;

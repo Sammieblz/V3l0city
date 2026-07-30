@@ -48,6 +48,7 @@ Current explicit marker:
 2026-05-19-trip-speed-sample-telemetry
 2026-05-26-trip-heading-diagnostics
 2026-05-27-offline-cloud-sync
+2026-07-29-theme-preference
 ```
 
 ### `preferences`
@@ -61,6 +62,7 @@ Columns:
 - `auto_start`
 - `auto_save`
 - `orientation_mode`
+- `theme_preference` (`system`, `light`, or `dark`; defaults to `system`)
 
 Repository:
 
@@ -77,8 +79,13 @@ type Preferences = {
   autoStart: boolean;
   autoSave: boolean;
   orientationMode: 'portrait' | 'landscape' | 'auto';
+  themePreference: 'system' | 'light' | 'dark';
 };
 ```
+
+`theme_preference` is a device-local shell preference. It is available before
+sign-in and is not synchronized to a cloud profile. The migration adds the
+column with `system` as its safe default for existing installations.
 
 ### `trips`
 

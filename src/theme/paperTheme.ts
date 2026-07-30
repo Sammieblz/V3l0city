@@ -1,6 +1,10 @@
-import { MD3DarkTheme, configureFonts } from 'react-native-paper';
+import {
+  MD3DarkTheme,
+  MD3LightTheme,
+  configureFonts,
+} from 'react-native-paper';
 
-export const colors = {
+export const darkColors = {
   accent: '#00E5FF',
   accentBright: '#33F7FF',
   accentDim: 'rgba(0, 229, 255, 0.14)',
@@ -32,6 +36,59 @@ export const colors = {
   north: '#FF3B30',
   gaugeTrack: '#283137',
   gaugeFill: '#00E5FF',
+};
+
+/**
+ * The light palette keeps the V3l0city instrument-panel identity while
+ * providing appropriate contrast on a light canvas. Accent and warning hues
+ * are intentionally darker than their dark-mode counterparts.
+ */
+export const lightColors: typeof darkColors = {
+  accent: '#007F92',
+  accentBright: '#009DB5',
+  accentDim: 'rgba(0, 127, 146, 0.14)',
+  accentMuted: 'rgba(0, 127, 146, 0.54)',
+  brandGold: '#936000',
+  brandGoldDim: 'rgba(147, 96, 0, 0.15)',
+  brandTeal: '#007C8F',
+  brandTealDim: 'rgba(0, 124, 143, 0.14)',
+  heatmapLow: 'rgba(0, 124, 143, 0.32)',
+  heatmapMid: 'rgba(0, 127, 146, 0.52)',
+  background: '#F4F7F8',
+  backgroundElevated: '#FFFFFF',
+  surface: '#FFFFFF',
+  surfaceVariant: '#E7EEF0',
+  surfaceGlass: 'rgba(255, 255, 255, 0.96)',
+  surfaceSoft: '#EDF3F4',
+  toastWarningBg: '#FFF7DE',
+  toastErrorBg: '#FFF0F3',
+  textPrimary: '#10191C',
+  textSecondary: '#45555C',
+  textMuted: '#68787E',
+  onAccent: '#FFFFFF',
+  onDanger: '#FFFFFF',
+  danger: '#C72345',
+  dangerDim: 'rgba(199, 35, 69, 0.14)',
+  warning: '#936000',
+  warningDim: 'rgba(147, 96, 0, 0.16)',
+  border: '#C9D6DA',
+  north: '#D42C36',
+  gaugeTrack: '#C7D5D8',
+  gaugeFill: '#007F92',
+};
+
+export type AppColorScheme = 'light' | 'dark';
+export type AppColors = typeof darkColors;
+
+/**
+ * Existing screens import this stable object directly. Keeping its identity
+ * while updating its semantic values lets dynamic JSX colors and regenerated
+ * StyleSheets follow the active application theme.
+ */
+export const colors: AppColors = { ...darkColors };
+
+export const setActiveColors = (colorScheme: AppColorScheme): void => {
+  Object.assign(colors, colorScheme === 'light' ? lightColors : darkColors);
 };
 
 export const spacing = {
@@ -94,35 +151,43 @@ const paperFontConfig = {
   bodySmall: { fontFamily: fontFamilies.body, fontWeight: '400' },
 } as const;
 
-export const darkTheme = {
-  ...MD3DarkTheme,
+const createPaperTheme = (
+  baseTheme: typeof MD3DarkTheme,
+  themeColors: AppColors,
+) => ({
+  ...baseTheme,
   colors: {
-    ...MD3DarkTheme.colors,
-    primary: colors.accent,
-    onPrimary: colors.onAccent,
-    primaryContainer: colors.accentDim,
-    onPrimaryContainer: colors.textPrimary,
-    secondary: colors.brandGold,
-    onSecondary: colors.onAccent,
-    secondaryContainer: colors.brandGoldDim,
-    onSecondaryContainer: colors.textPrimary,
-    tertiary: colors.brandTeal,
-    onTertiary: colors.onAccent,
-    tertiaryContainer: colors.brandTealDim,
-    onTertiaryContainer: colors.textPrimary,
-    background: colors.background,
-    surface: colors.surface,
-    surfaceVariant: colors.surfaceVariant,
-    onSurface: colors.textPrimary,
-    onSurfaceVariant: colors.textSecondary,
-    surfaceDisabled: 'rgba(234, 237, 242, 0.10)',
-    onSurfaceDisabled: 'rgba(234, 237, 242, 0.42)',
-    outline: colors.border,
-    outlineVariant: colors.surfaceVariant,
-    error: colors.danger,
-    onError: colors.onDanger,
-    errorContainer: colors.dangerDim,
-    onErrorContainer: colors.textPrimary,
+    ...baseTheme.colors,
+    primary: themeColors.accent,
+    onPrimary: themeColors.onAccent,
+    primaryContainer: themeColors.accentDim,
+    onPrimaryContainer: themeColors.textPrimary,
+    secondary: themeColors.brandGold,
+    onSecondary: themeColors.onAccent,
+    secondaryContainer: themeColors.brandGoldDim,
+    onSecondaryContainer: themeColors.textPrimary,
+    tertiary: themeColors.brandTeal,
+    onTertiary: themeColors.onAccent,
+    tertiaryContainer: themeColors.brandTealDim,
+    onTertiaryContainer: themeColors.textPrimary,
+    background: themeColors.background,
+    surface: themeColors.surface,
+    surfaceVariant: themeColors.surfaceVariant,
+    onSurface: themeColors.textPrimary,
+    onSurfaceVariant: themeColors.textSecondary,
+    surfaceDisabled:
+      baseTheme.dark ? 'rgba(234, 237, 242, 0.10)' : 'rgba(16, 25, 28, 0.10)',
+    onSurfaceDisabled:
+      baseTheme.dark ? 'rgba(234, 237, 242, 0.42)' : 'rgba(16, 25, 28, 0.42)',
+    outline: themeColors.border,
+    outlineVariant: themeColors.surfaceVariant,
+    error: themeColors.danger,
+    onError: themeColors.onDanger,
+    errorContainer: themeColors.dangerDim,
+    onErrorContainer: themeColors.textPrimary,
   },
   fonts: configureFonts({ config: paperFontConfig }),
-};
+});
+
+export const darkTheme = createPaperTheme(MD3DarkTheme, darkColors);
+export const lightTheme = createPaperTheme(MD3LightTheme, lightColors);

@@ -70,6 +70,10 @@ const coercePreferences = (value: unknown): Preferences | null => {
     autoStart: booleanValue(value.autoStart),
     autoSave: booleanValue(value.autoSave),
     orientationMode,
+    themePreference:
+      value.themePreference === 'light' || value.themePreference === 'dark'
+        ? value.themePreference
+        : 'system',
   };
 };
 

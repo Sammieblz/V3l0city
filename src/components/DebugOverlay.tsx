@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { colors } from '../theme/paperTheme';
+import { useThemedStyles } from '../theme/appTheme';
 
 import type { VelocitySensorsState } from '../hooks/useVelocitySensors';
 
@@ -10,6 +11,7 @@ type Props = {
 };
 
 const DebugOverlay: React.FC<Props> = ({ state, enabled }) => {
+  const styles = useThemedStyles(createStyles);
   const [collapsed, setCollapsed] = useState(true);
 
   if (!__DEV__ || !enabled) {
@@ -78,7 +80,7 @@ const DebugOverlay: React.FC<Props> = ({ state, enabled }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = () => StyleSheet.create({
   collapsedContainer: {
     position: 'absolute',
     left: 8,

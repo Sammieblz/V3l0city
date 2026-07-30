@@ -11,6 +11,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Snackbar } from 'react-native-paper';
 
 import { colors, fontFamilies, radii, spacing } from '../theme/paperTheme';
+import { useThemedStyles } from '../theme/appTheme';
 
 export type AppToastVariant = 'info' | 'success' | 'warning' | 'error';
 
@@ -25,14 +26,14 @@ type AppToastProps = {
   onDismiss: () => void;
 };
 
-const variantStyle: Record<
+const getVariantStyles = (): Record<
   AppToastVariant,
   {
     icon: keyof typeof MaterialCommunityIcons.glyphMap;
     accent: string;
     background: string;
   }
-> = {
+> => ({
   info: {
     icon: 'information-outline',
     accent: colors.accent,
@@ -53,11 +54,12 @@ const variantStyle: Record<
     accent: colors.danger,
     background: colors.toastErrorBg,
   },
-};
+});
 
 export default function AppToast({ toast, bottom, onDismiss }: AppToastProps) {
+  const styles = useThemedStyles(createStyles);
   const variant = toast?.variant ?? 'info';
-  const visual = variantStyle[variant];
+  const visual = getVariantStyles()[variant];
   const { width } = useWindowDimensions();
   const toastWidth = Math.min(Math.max(width - spacing.md * 2, 0), 420);
 
@@ -88,7 +90,7 @@ export default function AppToast({ toast, bottom, onDismiss }: AppToastProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = () => StyleSheet.create({
   wrapper: {
     alignItems: 'center',
     left: 0,

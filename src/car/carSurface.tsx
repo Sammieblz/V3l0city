@@ -14,7 +14,7 @@ import {
   isDriveSurfaceSnapshotStale,
   type DriveSurfaceSnapshot,
 } from '../driveSurface/snapshot';
-import { colors } from '../theme/paperTheme';
+import { colors, lightColors } from '../theme/paperTheme';
 
 type CarPlayLibrary = typeof import('react-native-carplay');
 type ListCarTemplate = InstanceType<CarPlayLibrary['ListTemplate']>;
@@ -200,7 +200,8 @@ const buildRichTemplateConfig = () => ({
   id: RICH_TEMPLATE_ID,
   component: CarDashboardSurface,
   guidanceBackgroundColor: colors.background,
-  tripEstimateStyle: 'dark' as const,
+  tripEstimateStyle:
+    colors.background === lightColors.background ? ('light' as const) : ('dark' as const),
   automaticallyHidesNavigationBar: true,
   hidesButtonsWithNavigationBar: true,
   onDidAppear: () => {

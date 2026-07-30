@@ -55,6 +55,7 @@ import {
   getPreferences,
   savePreferences,
   type OrientationMode,
+  type ThemePreference,
 } from '../database/preferencesRepository';
 import {
   appendTripSpeedSample,
@@ -79,6 +80,7 @@ import {
   markLocalOnboardingComplete,
 } from '../onboarding/onboardingStorage';
 import { colors, fontFamilies, radii, spacing } from '../theme/paperTheme';
+import { useThemedStyles } from '../theme/appTheme';
 import {
   getNotificationPermissionState,
   registerForPushNotifications,
@@ -176,7 +178,16 @@ const OrientationToggleIcon = React.memo(
   },
 );
 
-export default function Speedometer() {
+type SpeedometerProps = {
+  themePreference: ThemePreference;
+  onThemePreferenceChange: (preference: ThemePreference) => void;
+};
+
+export default function Speedometer({
+  themePreference,
+  onThemePreferenceChange,
+}: SpeedometerProps) {
+  const styles = useThemedStyles(createStyles);
   const [units, setUnits] = useState<Units>('km/h');
   const [mountIndex, setMountIndex] = useState(0);
   const [autoStart, setAutoStart] = useState(false);
@@ -512,10 +523,18 @@ export default function Speedometer() {
         autoStart,
         autoSave,
         orientationMode,
+        themePreference,
       });
     };
     void persist();
-  }, [units, mountIndex, autoStart, autoSave, orientationMode]);
+  }, [
+    units,
+    mountIndex,
+    autoStart,
+    autoSave,
+    orientationMode,
+    themePreference,
+  ]);
 
   useEffect(() => {
     const setupListener = async () => {
@@ -899,6 +918,7 @@ export default function Speedometer() {
         setAutoStart(prefs.autoStart);
         setAutoSave(prefs.autoSave);
         setOrientationMode(prefs.orientationMode);
+        onThemePreferenceChange(prefs.themePreference);
         await applyOrientation(prefs.orientationMode);
       }
 
@@ -1471,6 +1491,25 @@ export default function Speedometer() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.settingsRow}>
+          <Text style={styles.settingsLabel}>Appearance</Text>
+          <SegmentedButtons
+            value={themePreference}
+            onValueChange={(value) =>
+              onThemePreferenceChange(value as ThemePreference)
+            }
+            buttons={[
+              { value: 'system', label: 'System' },
+              { value: 'light', label: 'Light' },
+              { value: 'dark', label: 'Dark' },
+            ]}
+          />
+          <Text style={styles.settingsHelper}>
+            System follows your phone’s Light or Dark appearance. This setting
+            stays on this device and does not require a device permission.
+          </Text>
+        </View>
+
+        <View style={styles.settingsRow}>
           <Text style={styles.settingsLabel}>Units</Text>
           <SegmentedButtons
             value={units}
@@ -1760,7 +1799,7 @@ export default function Speedometer() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = () => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
