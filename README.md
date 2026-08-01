@@ -116,6 +116,40 @@ The project script sets `ANDROID_HOME` to the default macOS SDK location
 then adds `adb`, `emulator`, and `java` to `PATH`. If no Android device is
 connected, Expo will try to start an available AVD such as `Pixel_10_Pro`.
 
+## Android production release
+
+The native Android app is separate from the Next.js site in `web/`. Its Play
+Store identity is `com.v3l0city.app`, its current release version is `1.0.0`,
+and production builds are Android App Bundles (`.aab`), not web deployments.
+
+1. Configure the `production` EAS environment with only the mobile public
+   values that the app needs, including `EXPO_PUBLIC_SUPABASE_URL` and
+   `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` when cloud features are enabled.
+   Also configure every `EXPO_PUBLIC_LEGAL_*` value from `.env.example` with
+   the same legal entity, contacts, effective date, and document version used
+   by the matching `NEXT_PUBLIC_LEGAL_*` values in Vercel. The production
+   native config refuses to build when a required legal value is missing.
+   Do not put a Supabase service-role key, Play signing key, or other private
+   credential in Expo public variables or Git.
+2. Sign in to the EAS account that owns the Android package and let EAS manage
+   the upload key, or configure the existing upload key in EAS credentials.
+3. Create the store bundle:
+
+   ```bash
+   npx eas-cli build --platform android --profile production
+   ```
+
+   The profile uses the EAS `production` environment, produces an `.aab` for
+   the Play Store, and automatically increments the Android version code. Keep
+   the human-readable `expo.version` and `android/app/build.gradle`
+   `versionName` aligned whenever you make a user-visible release.
+4. Install the generated bundle through an internal Play testing track before
+   production submission. The Play Console receives the `.aab`; source code is
+   retained in this Git repository and is not uploaded to Google Play.
+
+Use a native tag such as `android-v1.0.0` for the release. Do not reuse the web
+tag `web-v0.1.0`; the two shells have independent release pipelines.
+
 ## Testing Without Physical Motion
 
 For simulator/emulator testing, use one of the built-in drive paths:
@@ -207,6 +241,10 @@ For simulator/emulator testing, use one of the built-in drive paths:
 ## Sensors and limitations
 
 - The native engine is foreground-first until a trip starts. During a user-started active trip, native live sessions may keep collectors running for widgets, Live Activity, and the Android active-trip notification.
+- Android asks for precise location only after the user selects **Start Trip**
+  and accepts the in-app explanation. V3l0city does not declare or request
+  Android background location; the visible active-trip foreground notification
+  communicates the limited period in which Android may keep collecting.
 - Widgets do not passively start GPS. Start a trip in the app first; save/stop the trip to end live surface tracking.
 - CarPlay/Android Auto are excluded from the v1.0.0 production binaries. The
   supported car/glance surfaces for v1 are iOS Live Activity/widgets and Android

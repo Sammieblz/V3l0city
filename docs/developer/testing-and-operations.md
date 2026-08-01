@@ -306,10 +306,14 @@ Store checklist:
   tokens, and diagnostics/telemetry if enabled.
 - Google Play Data Safety matches the same data inventory.
 - Google Play foreground service declaration explains user-started active-trip
-  speed tracking and the active-trip notification.
-- Google Play background location declaration explains that background location
-  is used only during user-started active trips for live widgets/notifications
-  and stops when the trip is saved.
+  speed tracking, the visible active-trip notification, and that collection
+  ends when the user saves the trip.
+- The merged Android manifest does not contain
+  `android.permission.ACCESS_BACKGROUND_LOCATION`. Do not complete a Play
+  background-location declaration for this release.
+- Google Play Data deletion provides the public production `/data-rights` URL
+  from the Next.js site. The native Account screen also provides password and
+  typed-confirmation account deletion.
 - Supabase migrations and Edge Functions are deployed before testing account,
   backup, friends, nearby, and leaderboards.
 - Production EAS environment values are configured outside git.
@@ -320,8 +324,41 @@ Manual release QA:
 - iOS widgets and Live Activity during an active trip.
 - Android widget and active-trip foreground notification.
 - Supabase sign-up/sign-in, backup, restore, friends, nearby, leaderboards.
-- Permission flows for denied, approximate, foreground-only, and background
-  location states.
+- New native account registration requires the 16+ attestation and acceptance
+  of the current Terms and Privacy Notice. Verify an existing account with an
+  outdated acceptance is routed through the same current-document gate.
+- Permission flows for first-run, denied, approximate, and precise foreground
+  location. Confirm no location prompt appears until **Start Trip** is chosen.
+- A complete active trip with the Android foreground notification visible,
+  including stop/save and service termination.
+- Native account deletion after re-authentication, including the local SQLite
+  trip-library purge and sign-out.
+
+### Android Play release procedure
+
+The React Native application and the separate `web/` Next.js project are
+released independently. For Android `v1.0.0`:
+
+1. Verify `app.json` and `android/app/build.gradle` use
+   `com.v3l0city.app` and the intended human-readable version.
+2. Configure the EAS `production` environment. Public Expo variables may be
+   embedded in the bundle; never add service-role keys, upload keys, or other
+   secrets to them. Configure every `EXPO_PUBLIC_LEGAL_*` value from the root
+   `.env.example` and keep it exactly aligned with the corresponding
+   `NEXT_PUBLIC_LEGAL_*` Vercel value. The production app config rejects a
+   build with missing legal values.
+3. Run `npx eas-cli build --platform android --profile production`. The
+   profile is store-distributed, creates an `.aab`, and increments the Android
+   version code.
+4. Upload the `.aab` to the Play internal testing track and run the manual QA
+   above on a real Android device. A new personal Play developer account may
+   require a closed test with 12 opted-in testers for 14 continuous days before
+   requesting production access; confirm the current Console requirement for
+   the account.
+5. Complete Play's App content, Data safety, precise-location permission,
+   foreground-service type/declaration, privacy-policy, and account-deletion
+   URL forms using the final production web domain. Do not upload the GitHub
+   source archive to Play; keep source provenance in the tagged GitHub release.
 
 ## Environment Variables
 

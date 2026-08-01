@@ -135,6 +135,9 @@ Android declares `ACCESS_FINE_LOCATION` and `ACCESS_COARSE_LOCATION`, but the
 native speed engine requires fine/precise location. Coarse-only approximate
 location emits `precise_location_required`. Motion and compass sensors do not
 need a separate Android runtime permission for this foreground use case.
+V3l0city does not declare Android `ACCESS_BACKGROUND_LOCATION`; the location
+collector begins only after the user starts a trip and the foreground service
+shows its active-trip notification.
 
 Expo Go will not include this local native module. Use development builds:
 

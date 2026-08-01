@@ -20,6 +20,20 @@ applyExpoPublicFallback(
   "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
   "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
 );
+applyExpoPublicFallback("NEXT_PUBLIC_SITE_URL", "EXPO_PUBLIC_SITE_URL");
+applyExpoPublicFallback(
+  "NEXT_PUBLIC_LEGAL_ENTITY_NAME",
+  "EXPO_PUBLIC_LEGAL_ENTITY_NAME",
+);
+applyExpoPublicFallback("NEXT_PUBLIC_LEGAL_ADDRESS", "EXPO_PUBLIC_LEGAL_ADDRESS");
+applyExpoPublicFallback("NEXT_PUBLIC_PRIVACY_EMAIL", "EXPO_PUBLIC_PRIVACY_EMAIL");
+applyExpoPublicFallback("NEXT_PUBLIC_SUPPORT_EMAIL", "EXPO_PUBLIC_SUPPORT_EMAIL");
+applyExpoPublicFallback("NEXT_PUBLIC_SAFETY_EMAIL", "EXPO_PUBLIC_SAFETY_EMAIL");
+applyExpoPublicFallback(
+  "NEXT_PUBLIC_LEGAL_EFFECTIVE_DATE",
+  "EXPO_PUBLIC_LEGAL_EFFECTIVE_DATE",
+);
+applyExpoPublicFallback("NEXT_PUBLIC_TERMS_VERSION", "EXPO_PUBLIC_TERMS_VERSION");
 
 const supabaseOrigin = process.env.NEXT_PUBLIC_SUPABASE_URL
   ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).origin
@@ -52,7 +66,9 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  turbopack: { root: process.cwd() },
+  // Legal copy is intentionally shared with the native app as a pure TypeScript
+  // module. Keep Turbopack and Vercel output tracing rooted at the repository.
+  turbopack: { root: resolve(process.cwd(), "..") },
   allowedDevOrigins: ["127.0.0.1"],
   // These values are deliberately public Supabase browser credentials. Defining
   // them here makes the root Expo fallback available to client-side modules at

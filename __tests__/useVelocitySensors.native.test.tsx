@@ -70,18 +70,21 @@ const baseCoords: Location.LocationObjectCoords = {
 
 type ProbeProps = {
   accumulateTrip?: boolean;
+  enabled?: boolean;
   simulationEnabled?: boolean;
   onState: (state: VelocitySensorsState, reset: () => void) => void;
 };
 
 function HookProbe({
   accumulateTrip = true,
+  enabled = true,
   simulationEnabled = false,
   onState,
 }: ProbeProps) {
   const { state, reset } = useVelocitySensors({
     mountOffsetDegrees: 7,
     accumulateTrip,
+    enabled,
     simulationEnabled,
   });
 
@@ -194,6 +197,25 @@ describe('useVelocitySensors native speed engine integration', () => {
       headingAvailable: true,
       isMoving: true,
     });
+  });
+
+  it('does not request location or start the native engine until tracking is enabled', async () => {
+    await act(async () => {
+      renderer = create(<HookProbe enabled={false} onState={jest.fn()} />);
+      await Promise.resolve();
+    });
+
+    expect(location.requestForegroundPermissionsAsync).not.toHaveBeenCalled();
+    expect(native.start).not.toHaveBeenCalled();
+    expect(location.watchPositionAsync).not.toHaveBeenCalled();
+
+    await act(async () => {
+      renderer?.update(<HookProbe enabled onState={jest.fn()} />);
+      await Promise.resolve();
+    });
+
+    expect(location.requestForegroundPermissionsAsync).toHaveBeenCalledTimes(1);
+    expect(native.start).toHaveBeenCalledTimes(1);
   });
 
   it('forwards trip accumulation pause and resume to native', async () => {

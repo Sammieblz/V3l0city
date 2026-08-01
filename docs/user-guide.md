@@ -389,9 +389,10 @@ trip. This is for testing only; real trips still use real location and motion
 data.
 
 On iPhone, live screen-off updates may ask for location permission that allows
-active-trip tracking in the background. On Android, live widgets need precise
-location and the active-trip notification; some devices may also ask for
-background location so tracking can continue when V3l0city is not visible.
+active-trip tracking in the background. On Android, V3l0city asks for precise
+location only after you choose **Start Trip**. A visible active-trip notification
+explains when Android may continue recording after you lock the screen or switch
+apps. The Android app does not request background-location permission.
 
 CarPlay and Android Auto dashboards are not part of the v1.0.0 production
 release. For v1, use iPhone Live Activities, iPhone widgets, Android widgets,
@@ -400,7 +401,16 @@ outside the main app.
 
 ## Privacy and Data
 
-Open **Menu > Privacy** to read the in-app privacy policy.
+Open **Menu > Legal & Privacy** to read the same Privacy Notice, Terms of
+Service, Driving Safety, Acceptable Use, Data Rights, and Cookie & Storage
+Notice commitments published on the V3l0city website. The cookie section
+explains that cookies apply to the web release; native apps use on-device
+storage instead.
+
+If you have a cloud account, open **Menu > Account** to update online choices
+or permanently delete the account and this phone's trip library. You must stop
+and save any active trip, enter your current password, and type `DELETE` before
+the irreversible deletion is available.
 
 V3l0city saves trips locally on your device first:
 

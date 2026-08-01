@@ -52,6 +52,8 @@ export class SupabaseAuthProvider implements AuthProvider {
         data: {
           username,
           display_name: displayName,
+          age_attested: input.ageAttested === true,
+          signup_terms_version: input.termsVersion ?? null,
         },
       },
     });
@@ -84,6 +86,75 @@ export class SupabaseAuthProvider implements AuthProvider {
     if (!supabase) return;
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
+  }
+
+  async hasAcceptedLegalDocuments(documentVersion: string): Promise<boolean> {
+    const supabase = getSupabaseClient();
+    if (!supabase) throw new Error('Cloud sync is not configured.');
+    const session = await this.getSession();
+    if (!session) return false;
+
+    const { data, error } = await supabase
+      .from('legal_acceptances')
+      .select('document_type')
+      .eq('user_id', session.userId)
+      .eq('document_version', documentVersion)
+      .in('document_type', ['terms', 'privacy_notice']);
+    if (error) throw error;
+
+    const accepted = new Set(data?.map((row) => row.document_type) ?? []);
+    return accepted.has('terms') && accepted.has('privacy_notice');
+  }
+
+  async acceptLegalDocuments(documentVersion: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    if (!supabase) throw new Error('Cloud sync is not configured.');
+    const session = await this.getSession();
+    if (!session) throw new Error('Sign in before accepting the current terms.');
+
+    const alreadyAccepted = await this.hasAcceptedLegalDocuments(documentVersion);
+    if (alreadyAccepted) return;
+
+    const { error } = await supabase.from('legal_acceptances').insert([
+      {
+        user_id: session.userId,
+        document_type: 'terms',
+        document_version: documentVersion,
+      },
+      {
+        user_id: session.userId,
+        document_type: 'privacy_notice',
+        document_version: documentVersion,
+      },
+    ]);
+    if (error) throw error;
+  }
+
+  async deleteAccount(currentPassword: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    if (!supabase) throw new Error('Cloud sync is not configured.');
+
+    const session = await this.getSession();
+    if (!session?.email) {
+      throw new Error('Sign in with your email account before deleting it.');
+    }
+    if (!currentPassword) {
+      throw new Error('Enter your current password to delete your account.');
+    }
+
+    const { error: reauthError } = await supabase.auth.signInWithPassword({
+      email: session.email,
+      password: currentPassword,
+    });
+    if (reauthError) throw reauthError;
+
+    const { error: deleteError } = await supabase.functions.invoke(
+      'delete-account',
+      { body: { confirmation: 'DELETE' } },
+    );
+    if (deleteError) throw deleteError;
+
+    await supabase.auth.signOut({ scope: 'local' });
   }
 
   async getProfile(): Promise<CloudProfile | null> {

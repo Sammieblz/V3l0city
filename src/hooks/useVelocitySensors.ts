@@ -99,6 +99,8 @@ export type VelocitySensorsState = VelocityStats & {
 type UseVelocitySensorsOptions = {
   mountOffsetDegrees: number;
   kalmanOptions?: typeof DEFAULT_KALMAN_OPTIONS;
+  /** Start the location and native speed pipeline only after a deliberate trip action. */
+  enabled?: boolean;
   /** When false (trip paused), only speedMps is updated for display; distance and max/average are not accumulated. */
   accumulateTrip?: boolean;
   /** Dev-only synthetic drive profile for emulator/simulator testing. */
@@ -186,6 +188,7 @@ const getHeadingQuality = (
 export const useVelocitySensors = ({
   mountOffsetDegrees,
   kalmanOptions = DEFAULT_KALMAN_OPTIONS,
+  enabled = true,
   accumulateTrip = true,
   simulationEnabled = false,
 }: UseVelocitySensorsOptions) => {
@@ -374,6 +377,16 @@ export const useVelocitySensors = ({
   };
 
   useEffect(() => {
+    if (!enabled) {
+      // Do not ask Android for location while the dashboard is merely open.
+      // The previous enabled effect cleans up any active native service or JS
+      // subscriptions before this branch runs.
+      setPermission('unknown');
+      setStatus('initializing');
+      setErrorMessage(null);
+      return undefined;
+    }
+
     let locationSubscription: Location.LocationSubscription | null = null;
     let headingSubscription: Location.LocationSubscription | null = null;
     let motionSubscription: { remove: () => void } | null = null;
@@ -883,6 +896,7 @@ export const useVelocitySensors = ({
     predictSpeed,
     shouldUseNativeEngine,
     simulationEnabled,
+    enabled,
   ]);
 
   useEffect(() => {

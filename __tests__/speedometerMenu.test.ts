@@ -50,7 +50,7 @@ describe('speedometerMenu', () => {
     expect(getSpeedometerScreenTitle('leaderboards')).toBe('Leaderboards');
     expect(getSpeedometerScreenTitle('friends')).toBe('Find Friends');
     expect(getSpeedometerScreenTitle('account')).toBe('Account / Sync');
-    expect(getSpeedometerScreenTitle('privacy')).toBe('Privacy');
+    expect(getSpeedometerScreenTitle('privacy')).toBe('Legal & Privacy');
     expect(getSpeedometerScreenTitle('onboarding')).toBe('Welcome');
   });
 });

@@ -20,12 +20,13 @@ npm run test:e2e
 
 ## Production launch checklist
 
-- Create a Vercel project with `web/` as its root directory. Set every variable in `.env.example`, including the legal entity identity, public contact addresses, legal effective date, and terms version. Vercel production builds fail if those required legal values are absent.
+- Create a Vercel project with `web/` as its root directory. Set every variable in `.env.example`, including the legal entity identity, public contact addresses, legal effective date, and terms version. Vercel production builds fail if those required legal values are absent. Keep each `NEXT_PUBLIC_LEGAL_*` value exactly aligned with the corresponding `EXPO_PUBLIC_LEGAL_*` value in the EAS production environment so the web and native legal surfaces render the same documents.
 - Configure `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` directly in Vercel; the repository-root Expo `.env` fallback is local-development only. Never use `SUPABASE_SERVICE_ROLE_KEY` in this project. The service role remains confined to Supabase Edge Function infrastructure.
 - In Supabase Auth, set the production Site URL and specific production/preview redirect URLs, enable email confirmation and production SMTP, set an appropriate password policy/rate limit, and configure Turnstile in the Dashboard. Set the matching public Turnstile site key in Vercel.
 - Deploy the migrations in `supabase/migrations/`, then deploy `delete-account` and `report-profile`. Confirm new tables are exposed to the Data API only with their RLS policies enabled.
 - Validate RLS with separate accounts: direct profile reads must return only the signed-in owner; legal acceptances and reports must be owner-only; all social data flows must use their Edge Functions.
 - Have qualified counsel finalize the legal entity information, retention schedule, international-transfer terms, governing-law/dispute provisions, vendor agreements, and policy language for the actual launch jurisdictions. These pages are implementation-ready disclosures, not legal advice or a compliance guarantee.
+- The canonical document structure and copy are in `../legal/legalDocuments.ts`. Both application shells render that source; do not create platform-specific legal copy.
 - Manually test current iOS Safari, Android Chrome, and desktop Chromium. In particular, verify phone-only manual Start/Stop, foreground/lock interruption notices, no desktop drive controls, cloud restore, consent withdrawal, deletion, and CSP/CAPTCHA behavior.
 
 ## Product boundaries

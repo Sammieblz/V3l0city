@@ -50,8 +50,10 @@ There are two onboarding states:
   not require Supabase configuration or network.
 - Signed-in onboarding is stored on the Supabase `profiles` row through
   `onboarding_completed_at`. The sign-up screen collects name, username, email,
-  and password. New signed-up users then see online feature setup. Once saved,
-  Account / Sync becomes a normal settings screen.
+  password, a non-DOB 16+ attestation, and current Terms/Privacy acceptance.
+  New signed-up users then see online feature setup. Once saved, Account / Sync
+  becomes a normal settings screen. Returning users with no current legal
+  acceptance must complete the same legal step before they can continue.
 
 These states are intentionally separate. A user can complete local onboarding,
 stay anonymous forever, and later sign in without losing local trips. A user can
@@ -59,8 +61,10 @@ also sign out after cloud onboarding; local data remains and sync pauses.
 
 Sign-up profile bootstrap:
 
-- The mobile client sends `username` and `display_name` as Supabase Auth
-  metadata during email sign-up.
+- The mobile client sends `username`, `display_name`, `age_attested`, and the
+  sign-up terms version as Supabase Auth metadata during email sign-up. The
+  metadata is informational; the owner-only `legal_acceptances` records are
+  the source of truth for accepted documents.
 - The migration installs `private.handle_new_auth_user()`, an auth trigger that
   creates the initial `profiles` row from that metadata.
 - The trigger lives in the private schema, not the exposed public schema.
@@ -135,8 +139,11 @@ Social features are opt-in.
 - Exact coordinates and trip routes are not stored for nearby discovery.
 - Leaderboards return rank, profile display fields, metric, period, and value.
 - Detailed trips and samples are not returned in leaderboard responses.
-- The in-app privacy policy is maintained in `src/content/privacyPolicy.ts` and
-  rendered by `PrivacyPolicyScreen`.
+- Shared legal documents are maintained in `legal/legalDocuments.ts` and
+  rendered by both the Next.js site and native legal center. Native production
+  legal contact values are configured through `EXPO_PUBLIC_LEGAL_*` variables.
+  `src/content/privacyPolicy.ts` remains a compatibility export for older
+  imports.
 - SecureStore holds Supabase sessions; SQLite remains the durable local trip
   store; AsyncStorage holds non-secret app flags and identifiers.
 

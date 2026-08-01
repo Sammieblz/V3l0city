@@ -75,9 +75,12 @@ for `RemoteViews`. This avoids depending on React Native views inside the widget
 and gives the widget a richer visual style than plain TextViews.
 
 Android declares `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_LOCATION`,
-`ACCESS_FINE_LOCATION`, and `ACCESS_BACKGROUND_LOCATION`. Background location is
-only for user-started active trips and resume/restart reliability; widgets do
-not passively start GPS by themselves.
+`ACCESS_FINE_LOCATION`, and `ACCESS_COARSE_LOCATION`. It does not declare
+`ACCESS_BACKGROUND_LOCATION`. A user chooses **Start Trip**, sees the in-app
+location explanation, and grants precise location before the foreground service
+starts. The visible active-trip notification communicates the limited period in
+which collection can continue while the app is not visible; widgets never start
+GPS by themselves.
 
 ## CarPlay and Android Auto
 

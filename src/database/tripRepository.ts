@@ -500,6 +500,14 @@ export const clearTrips = async (): Promise<void> => {
   });
 };
 
+export const eraseLocalTripLibrary = async (): Promise<void> => {
+  const db = getDatabase();
+  db.withTransactionSync(() => {
+    db.runSync('DELETE FROM sync_outbox');
+    db.runSync('DELETE FROM trips');
+  });
+};
+
 export const softDeleteTrip = async (id: string): Promise<void> => {
   const db = getDatabase();
   const now = nowIso();

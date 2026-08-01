@@ -14,7 +14,12 @@
       }
     },
     "production": {
-      "autoIncrement": false,
+      "distribution": "store",
+      "environment": "production",
+      "env": {
+        "V3L0CITY_RELEASE_ENV": "production"
+      },
+      "autoIncrement": true,
       "ios": {
         "simulator": false
       },

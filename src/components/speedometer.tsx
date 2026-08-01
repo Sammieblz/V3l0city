@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Appbar,
   Button,
+  Dialog,
   IconButton,
   Modal,
   Portal,
@@ -226,6 +227,10 @@ export default function Speedometer({
   );
   const [notificationPermission, setNotificationPermission] =
     useState<NotificationPermissionState>('undetermined');
+  const [trackingEnabled, setTrackingEnabled] = useState(false);
+  const [locationDisclosureVisible, setLocationDisclosureVisible] =
+    useState(false);
+  const [pendingTripStart, setPendingTripStart] = useState(false);
 
   const dimensions = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -273,6 +278,7 @@ export default function Speedometer({
   const mountLabel = MOUNT_OPTIONS[mountIndex].label;
   const { state, reset } = useVelocitySensors({
     mountOffsetDegrees: mountOffset,
+    enabled: trackingEnabled,
     accumulateTrip: isTripActive && !isTripPaused,
     simulationEnabled: __DEV__ && simulationEnabled,
   });
@@ -284,6 +290,7 @@ export default function Speedometer({
     distanceMeters,
     headingDegrees,
     errorMessage,
+    permission,
     quality,
     status,
   } = useMemo(
@@ -294,6 +301,7 @@ export default function Speedometer({
       distanceMeters: state.distanceMeters,
       headingDegrees: state.headingDegrees,
       errorMessage: state.errorMessage,
+      permission: state.permission,
       quality: state.quality,
       status: state.status,
     }),
@@ -703,6 +711,7 @@ export default function Speedometer({
     setTrips(stored);
     setIsTripActive(false);
     setIsTripPaused(false);
+    setTrackingEnabled(false);
     setCurrentTripStart(null);
     currentTripSamples.current = [];
     lastTripSampleTimestamp.current = null;
@@ -723,10 +732,42 @@ export default function Speedometer({
     units,
   ]);
 
+  const requestTripStart = useCallback(() => {
+    if (isTripActive) return;
+
+    setLocationDisclosureVisible(true);
+  }, [isTripActive]);
+
+  const confirmLocationDisclosure = useCallback(() => {
+    setLocationDisclosureVisible(false);
+    setPendingTripStart(true);
+    setTrackingEnabled(true);
+  }, []);
+
+  useEffect(() => {
+    if (!pendingTripStart) return;
+
+    if (permission === 'granted') {
+      setPendingTripStart(false);
+      void startTrip()
+        .then(() => showToast('Trip started', 'success'))
+        .catch((error) => {
+          logAppWarning('trip', error);
+          showToast('Could not start the trip', 'error');
+          setTrackingEnabled(false);
+        });
+      return;
+    }
+
+    if (permission === 'denied' || permission === 'precise_required') {
+      setPendingTripStart(false);
+      setTrackingEnabled(false);
+    }
+  }, [pendingTripStart, permission, showToast, startTrip]);
+
   const handleTripToggle = async () => {
     if (!isTripActive) {
-      await startTrip();
-      showToast('Trip started', 'success');
+      requestTripStart();
       return;
     }
 
@@ -779,8 +820,7 @@ export default function Speedometer({
           };
         },
         startTrip: async () => {
-          await startTrip();
-          showToast('Trip started', 'success');
+          requestTripStart();
         },
         pauseTrip: pauseTripFromCar,
         resumeTrip: resumeTripFromCar,
@@ -798,7 +838,7 @@ export default function Speedometer({
       pauseTripFromCar,
       resumeTripFromCar,
       showToast,
-      startTrip,
+      requestTripStart,
       stopAndSaveTrip,
     ],
   );
@@ -1223,8 +1263,8 @@ export default function Speedometer({
         <View style={styles.messageContainer}>
           <Text style={styles.messageTitle}>Location Permission Required</Text>
           <Text style={styles.messageBody}>
-            Enable location access in your device settings to see speed and
-            distance.
+            Enable location access in your device settings, then start a trip
+            to record speed and distance.
           </Text>
         </View>
       );
@@ -1767,7 +1807,12 @@ export default function Speedometer({
               void refreshDrawerAccountSummary();
             }}
             onAccountChanged={() => void refreshDrawerAccountSummary()}
+            onAccountDeleted={() => {
+              setTrips([]);
+              void refreshDrawerAccountSummary();
+            }}
             onOpenPrivacy={() => setActiveScreen('privacy')}
+            tripActive={isTripActive}
           />
         ) : activeScreen === 'privacy' ? (
           <PrivacyPolicyScreen />
@@ -1780,6 +1825,30 @@ export default function Speedometer({
       {renderLandscapeOrientationButton()}
 
       <Portal>
+        <Dialog
+          visible={locationDisclosureVisible}
+          onDismiss={() => setLocationDisclosureVisible(false)}
+        >
+          <Dialog.Title>Location for an active trip</Dialog.Title>
+          <Dialog.Content>
+            <Text style={styles.dialogText}>
+              V3l0city uses precise location only after you start a trip to
+              calculate speed, distance, and direction. Android shows a visible
+              active-trip notification while recording may continue after you
+              lock the screen or switch apps. Stop and save the trip when you
+              are done. Exact routes are not shared with friends or
+              leaderboards.
+            </Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setLocationDisclosureVisible(false)}>
+              Not now
+            </Button>
+            <Button mode="contained" onPress={confirmLocationDisclosure}>
+              Continue
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
         <SideDrawer
           visible={drawerOpen}
           groups={drawerGroups}
@@ -1875,6 +1944,12 @@ const createStyles = () => StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  dialogText: {
+    color: colors.textSecondary,
+    fontFamily: fontFamilies.body,
+    fontSize: 14,
+    lineHeight: 20,
   },
   dialContainer: {
     alignItems: 'center',

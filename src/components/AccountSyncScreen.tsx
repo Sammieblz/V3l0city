@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Button, SegmentedButtons, TextInput } from 'react-native-paper';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Button, Checkbox, SegmentedButtons, TextInput } from 'react-native-paper';
 
 import BrandMark from './BrandMark';
 import {
@@ -13,7 +13,11 @@ import {
 } from '../cloud/cloudService';
 import type { CloudAuthSession, CloudProfile } from '../cloud/types';
 import { getCoarseLocation } from '../cloud/utils/coarseLocation';
-import { getPendingSyncChangeCount } from '../database/tripRepository';
+import { mobileLegalContactDetails } from '../content/legalDocuments';
+import {
+  eraseLocalTripLibrary,
+  getPendingSyncChangeCount,
+} from '../database/tripRepository';
 import { colors, fontFamilies, radii, spacing } from '../theme/paperTheme';
 import { useThemedStyles } from '../theme/appTheme';
 import { logAppWarning } from '../utils/logging';
@@ -26,6 +30,7 @@ type AccountStep =
   | 'account-unavailable'
   | 'check-email'
   | 'cloud-onboarding'
+  | 'legal-acceptance'
   | 'loading'
   | 'settings';
 
@@ -33,16 +38,20 @@ type AccountSyncScreenProps = {
   initialStep?: AccountEntryStep;
   onAuthenticated?: () => void;
   onAccountChanged?: () => void;
+  onAccountDeleted?: () => void;
   onOpenPrivacy?: () => void;
+  tripActive?: boolean;
 };
 
 const AccountSyncScreen: React.FC<AccountSyncScreenProps> = ({
   initialStep = 'landing',
   onAuthenticated,
   onAccountChanged,
+  onAccountDeleted,
   onOpenPrivacy,
+  tripActive = false,
 }) => {
-  styles = useThemedStyles(createStyles);
+  const styles = useThemedStyles(createStyles);
   const [session, setSession] = useState<CloudAuthSession | null>(null);
   const [profile, setProfile] = useState<CloudProfile | null>(null);
   const [step, setStep] = useState<AccountStep>(
@@ -64,6 +73,10 @@ const AccountSyncScreen: React.FC<AccountSyncScreenProps> = ({
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
+  const [deletionPassword, setDeletionPassword] = useState('');
+  const [deletionConfirmation, setDeletionConfirmation] = useState('');
+  const [ageConfirmed, setAgeConfirmed] = useState(false);
+  const [legalConfirmed, setLegalConfirmed] = useState(false);
 
   const configured = isCloudConfigured();
 
@@ -100,6 +113,14 @@ const AccountSyncScreen: React.FC<AccountSyncScreenProps> = ({
         if (!nextSession) {
           hydrateProfile(null);
           setStep(nextStep ?? initialStep);
+          return;
+        }
+
+        const legalAccepted = await cloudAuth.hasAcceptedLegalDocuments(
+          mobileLegalContactDetails.termsVersion,
+        );
+        if (!legalAccepted) {
+          setStep('legal-acceptance');
           return;
         }
 
@@ -149,14 +170,16 @@ const AccountSyncScreen: React.FC<AccountSyncScreenProps> = ({
         displayName,
         email: signUpEmail,
         password: signUpPassword,
+        ageAttested: ageConfirmed,
+        termsVersion: mobileLegalContactDetails.termsVersion,
         username,
       });
       setSignInEmail(result.email);
       if (result.session) {
         setSession(result.session);
-        await refresh('cloud-onboarding');
+        await refresh();
         onAccountChanged?.();
-        setMessage('Account created. Choose your online preferences.');
+        setMessage('Account created. Review and accept the current terms.');
         return;
       }
 
@@ -171,6 +194,15 @@ const AccountSyncScreen: React.FC<AccountSyncScreenProps> = ({
         signInPassword,
       );
       setSession(nextSession);
+      const legalAccepted = await cloudAuth.hasAcceptedLegalDocuments(
+        mobileLegalContactDetails.termsVersion,
+      );
+      if (!legalAccepted) {
+        onAccountChanged?.();
+        setStep('legal-acceptance');
+        setMessage('Review and accept the current terms to continue.');
+        return;
+      }
       const { profile: nextProfile, unavailable } = await loadProfile();
       hydrateProfile(nextProfile);
       onAccountChanged?.();
@@ -190,6 +222,16 @@ const AccountSyncScreen: React.FC<AccountSyncScreenProps> = ({
         return;
       }
       onAuthenticated?.();
+    });
+
+  const acceptCurrentLegalDocuments = () =>
+    run(async () => {
+      await cloudAuth.acceptLegalDocuments(
+        mobileLegalContactDetails.termsVersion,
+      );
+      await refresh();
+      onAccountChanged?.();
+      setMessage('Terms and Privacy Notice accepted.');
     });
 
   const buildProfileInput = (nextCoarseLocationHash = coarseLocationHash) => ({
@@ -287,6 +329,28 @@ const AccountSyncScreen: React.FC<AccountSyncScreenProps> = ({
       setMessage('Signed out. Local trips stay on this device.');
     });
 
+  const deleteAccount = () =>
+    run(async () => {
+      if (tripActive) {
+        throw new Error('Stop and save the active trip before deleting your account.');
+      }
+      if (deletionConfirmation.trim() !== 'DELETE') {
+        throw new Error('Type DELETE to confirm permanent account deletion.');
+      }
+
+      await cloudAuth.deleteAccount(deletionPassword);
+      await eraseLocalTripLibrary();
+      setSession(null);
+      hydrateProfile(null);
+      setPendingSyncCount(0);
+      setDeletionPassword('');
+      setDeletionConfirmation('');
+      setStep('landing');
+      onAccountChanged?.();
+      onAccountDeleted?.();
+      setMessage('Your account and this device’s trip library were permanently deleted.');
+    });
+
   if (!configured) {
     return (
       <View style={styles.centerState}>
@@ -303,7 +367,7 @@ const AccountSyncScreen: React.FC<AccountSyncScreenProps> = ({
             onPress={onOpenPrivacy}
             style={styles.primaryButton}
           >
-            Privacy policy
+            Legal & privacy
           </Button>
         )}
       </View>
@@ -364,6 +428,25 @@ const AccountSyncScreen: React.FC<AccountSyncScreenProps> = ({
             onChangeText={setSignUpPassword}
             style={styles.input}
           />
+          <LegalConfirmationRow
+            checked={ageConfirmed}
+            label="I confirm that I am at least 16 years old."
+            onPress={() => setAgeConfirmed((value) => !value)}
+          />
+          <LegalConfirmationRow
+            checked={legalConfirmed}
+            label="I agree to the Terms of Service and acknowledge the Privacy Notice."
+            onPress={() => setLegalConfirmed((value) => !value)}
+          />
+          {onOpenPrivacy && (
+            <Button
+              mode="text"
+              icon="file-document-outline"
+              onPress={onOpenPrivacy}
+            >
+              Read legal documents
+            </Button>
+          )}
           <Button
             mode="contained"
             loading={loading}
@@ -372,7 +455,9 @@ const AccountSyncScreen: React.FC<AccountSyncScreenProps> = ({
               displayName.trim().length < 1 ||
               username.trim().length < 3 ||
               signUpEmail.trim().length === 0 ||
-              signUpPassword.length < 6
+              signUpPassword.length < 6 ||
+              !ageConfirmed ||
+              !legalConfirmed
             }
             onPress={submitSignUp}
             style={styles.primaryButton}
@@ -455,6 +540,12 @@ const AccountSyncScreen: React.FC<AccountSyncScreenProps> = ({
             Sign out
           </Button>
         </AuthPanel>
+      ) : step === 'legal-acceptance' ? (
+        <LegalAcceptancePanel
+          loading={loading}
+          onAccept={() => void acceptCurrentLegalDocuments()}
+          onOpenLegal={onOpenPrivacy}
+        />
       ) : (
         <>
           <ProfilePanel
@@ -476,35 +567,46 @@ const AccountSyncScreen: React.FC<AccountSyncScreenProps> = ({
           />
 
           {step === 'settings' && profile && (
-            <View style={styles.panel}>
-              <Text style={styles.sectionTitle}>Automatic cloud backup</Text>
-              <Text style={styles.body}>
-                Trips on this phone stay in control. Backup sends local changes
-                first and restore only adds trips missing from this phone.
-              </Text>
-              <Text style={styles.syncState}>
-                Automatic cloud backup is {profile.syncEnabled ? 'on' : 'off'}.
-                {` ${pendingSyncCount} local change${
-                  pendingSyncCount === 1 ? '' : 's'
-                } pending.`}
-              </Text>
-              <View style={styles.buttonRow}>
-                <Button
-                  mode="contained-tonal"
-                  disabled={loading}
-                  onPress={syncNow}
-                >
-                  Back up now
-                </Button>
-                <Button
-                  mode="contained-tonal"
-                  disabled={loading}
-                  onPress={restoreNow}
-                >
-                  Restore
-                </Button>
+            <>
+              <View style={styles.panel}>
+                <Text style={styles.sectionTitle}>Automatic cloud backup</Text>
+                <Text style={styles.body}>
+                  Trips on this phone stay in control. Backup sends local changes
+                  first and restore only adds trips missing from this phone.
+                </Text>
+                <Text style={styles.syncState}>
+                  Automatic cloud backup is {profile.syncEnabled ? 'on' : 'off'}.
+                  {` ${pendingSyncCount} local change${
+                    pendingSyncCount === 1 ? '' : 's'
+                  } pending.`}
+                </Text>
+                <View style={styles.buttonRow}>
+                  <Button
+                    mode="contained-tonal"
+                    disabled={loading}
+                    onPress={syncNow}
+                  >
+                    Back up now
+                  </Button>
+                  <Button
+                    mode="contained-tonal"
+                    disabled={loading}
+                    onPress={restoreNow}
+                  >
+                    Restore
+                  </Button>
+                </View>
               </View>
-            </View>
+              <AccountDeletionPanel
+                confirmation={deletionConfirmation}
+                disabled={loading || tripActive}
+                password={deletionPassword}
+                tripActive={tripActive}
+                onConfirmationChange={setDeletionConfirmation}
+                onDelete={() => void deleteAccount()}
+                onPasswordChange={setDeletionPassword}
+              />
+            </>
           )}
 
           {session && (
@@ -528,7 +630,10 @@ const Landing: React.FC<{
   onSignUp: () => void;
   onSignIn: () => void;
   onOpenPrivacy?: () => void;
-}> = ({ onSignUp, onSignIn, onOpenPrivacy }) => (
+}> = ({ onSignUp, onSignIn, onOpenPrivacy }) => {
+  const styles = useThemedStyles(createStyles);
+
+  return (
   <View style={styles.panel}>
     <BrandMark size={70} style={styles.landingMark} />
     <Text style={styles.title}>Account / Sync</Text>
@@ -548,23 +653,156 @@ const Landing: React.FC<{
         icon="shield-lock-outline"
         onPress={onOpenPrivacy}
       >
-        Privacy policy
+        Legal & privacy
       </Button>
     )}
   </View>
-);
+  );
+};
 
 const AuthPanel: React.FC<{
   title: string;
   body: string;
   children?: React.ReactNode;
-}> = ({ title, body, children }) => (
+}> = ({ title, body, children }) => {
+  const styles = useThemedStyles(createStyles);
+
+  return (
   <View style={styles.panel}>
     <Text style={styles.title}>{title}</Text>
     <Text style={styles.body}>{body}</Text>
     {children}
   </View>
-);
+  );
+};
+
+const LegalConfirmationRow: React.FC<{
+  checked: boolean;
+  label: string;
+  onPress: () => void;
+}> = ({ checked, label, onPress }) => {
+  const styles = useThemedStyles(createStyles);
+
+  return (
+  <Pressable
+    accessibilityRole="checkbox"
+    accessibilityState={{ checked }}
+    onPress={onPress}
+    style={styles.legalCheckRow}
+  >
+    <Checkbox status={checked ? 'checked' : 'unchecked'} />
+    <Text style={styles.legalCheckText}>{label}</Text>
+  </Pressable>
+  );
+};
+
+const LegalAcceptancePanel: React.FC<{
+  loading: boolean;
+  onAccept: () => void;
+  onOpenLegal?: () => void;
+}> = ({ loading, onAccept, onOpenLegal }) => {
+  const styles = useThemedStyles(createStyles);
+
+  return (
+  <AuthPanel
+    title="Review current terms"
+    body="Accept the current Terms of Service and acknowledge the Privacy Notice before using cloud backup, friends, or leaderboards."
+  >
+    <Text style={styles.legalVersion}>
+      Effective {mobileLegalContactDetails.legalEffectiveDate} · Version{' '}
+      {mobileLegalContactDetails.termsVersion}
+    </Text>
+    {onOpenLegal && (
+      <Button
+        mode="contained-tonal"
+        icon="file-document-outline"
+        onPress={onOpenLegal}
+        style={styles.primaryButton}
+      >
+        Read legal documents
+      </Button>
+    )}
+    <Button
+      mode="contained"
+      disabled={loading}
+      loading={loading}
+      onPress={onAccept}
+      style={styles.primaryButton}
+    >
+      Accept & continue
+    </Button>
+  </AuthPanel>
+  );
+};
+
+const AccountDeletionPanel: React.FC<{
+  confirmation: string;
+  disabled: boolean;
+  password: string;
+  tripActive: boolean;
+  onConfirmationChange: (value: string) => void;
+  onDelete: () => void;
+  onPasswordChange: (value: string) => void;
+}> = ({
+  confirmation,
+  disabled,
+  password,
+  tripActive,
+  onConfirmationChange,
+  onDelete,
+  onPasswordChange,
+}) => {
+  const styles = useThemedStyles(createStyles);
+
+  return (
+  <View style={[styles.panel, styles.dangerPanel]}>
+    <Text style={styles.sectionTitle}>Delete account and data</Text>
+    <Text style={styles.body}>
+      This permanently deletes your cloud account, profile, cloud trips, social
+      data, and every trip and sync record saved on this device. Preferences
+      stay on this phone. This cannot be undone.
+    </Text>
+    {tripActive ? (
+      <Text style={styles.dangerHelper}>
+        Stop and save the active trip before deleting your account.
+      </Text>
+    ) : (
+      <>
+        <TextInput
+          mode="outlined"
+          label="Current password"
+          value={password}
+          autoCapitalize="none"
+          autoCorrect={false}
+          secureTextEntry
+          style={styles.input}
+          onChangeText={onPasswordChange}
+        />
+        <TextInput
+          mode="outlined"
+          label="Type DELETE to confirm"
+          value={confirmation}
+          autoCapitalize="characters"
+          autoCorrect={false}
+          style={styles.input}
+          onChangeText={onConfirmationChange}
+        />
+        <Button
+          mode="contained"
+          buttonColor={colors.danger}
+          disabled={disabled || !password || confirmation.trim() !== 'DELETE'}
+          icon="delete-forever-outline"
+          style={styles.primaryButton}
+          textColor={colors.onDanger}
+          onPress={onDelete}
+        >
+          Permanently delete account
+        </Button>
+      </>
+    )}
+  </View>
+  );
+};
 
 const ProfilePanel: React.FC<{
   completeMode: boolean;
@@ -598,7 +836,10 @@ const ProfilePanel: React.FC<{
   onNearbyOptInChange,
   onCaptureCoarseLocation,
   onSave,
-}) => (
+}) => {
+  const styles = useThemedStyles(createStyles);
+
+  return (
   <View style={styles.panel}>
     <Text style={styles.sectionTitle}>
       {completeMode ? 'Online feature setup' : 'Profile settings'}
@@ -664,13 +905,17 @@ const ProfilePanel: React.FC<{
       {completeMode ? 'Finish setup' : 'Save changes'}
     </Button>
   </View>
-);
+  );
+};
 
 const SettingToggle: React.FC<{
   label: string;
   value: boolean;
   onChange: (value: boolean) => void;
-}> = ({ label, value, onChange }) => (
+}> = ({ label, value, onChange }) => {
+  const styles = useThemedStyles(createStyles);
+
+  return (
   <View style={styles.toggleRow}>
     <Text style={styles.toggleLabel}>{label}</Text>
     <SegmentedButtons
@@ -683,7 +928,8 @@ const SettingToggle: React.FC<{
       style={styles.toggleButtons}
     />
   </View>
-);
+  );
+};
 
 const createStyles = () => StyleSheet.create({
   content: {
@@ -718,6 +964,18 @@ const createStyles = () => StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     padding: spacing.md,
   },
+  dangerPanel: {
+    backgroundColor: colors.dangerDim,
+    borderColor: colors.danger,
+  },
+  dangerHelper: {
+    color: colors.danger,
+    fontFamily: fontFamilies.bodySemiBold,
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 17,
+    marginTop: spacing.sm,
+  },
   title: {
     color: colors.textPrimary,
     fontFamily: fontFamilies.displayBold,
@@ -744,6 +1002,27 @@ const createStyles = () => StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     marginTop: spacing.xs,
+  },
+  legalCheckRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    marginTop: spacing.xs,
+    paddingVertical: spacing.xxs,
+  },
+  legalCheckText: {
+    color: colors.textSecondary,
+    flex: 1,
+    fontFamily: fontFamilies.body,
+    fontSize: 13,
+    lineHeight: 18,
+    marginLeft: spacing.xxs,
+  },
+  legalVersion: {
+    color: colors.textMuted,
+    fontFamily: fontFamilies.bodySemiBold,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: spacing.sm,
   },
   syncState: {
     color: colors.accent,
@@ -796,7 +1075,5 @@ const createStyles = () => StyleSheet.create({
     maxWidth: 220,
   },
 });
-
-let styles = createStyles();
 
 export default AccountSyncScreen;

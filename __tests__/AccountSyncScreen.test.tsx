@@ -9,9 +9,12 @@ jest.mock('../src/cloud/cloudService', () => ({
   cloudAuth: {
     getProfile: jest.fn(),
     getSession: jest.fn(),
+    hasAcceptedLegalDocuments: jest.fn(),
+    acceptLegalDocuments: jest.fn(),
     signInWithEmail: jest.fn(),
     signOut: jest.fn(),
     signUpWithEmail: jest.fn(),
+    deleteAccount: jest.fn(),
   },
   completeCloudOnboarding: jest.fn(),
   isCloudConfigured: jest.fn(),
@@ -25,6 +28,7 @@ jest.mock('../src/cloud/utils/coarseLocation', () => ({
 }));
 
 jest.mock('../src/database/tripRepository', () => ({
+  eraseLocalTripLibrary: jest.fn(),
   getPendingSyncChangeCount: jest.fn(),
 }));
 
@@ -45,6 +49,7 @@ describe('AccountSyncScreen', () => {
     jest.clearAllMocks();
     isCloudConfiguredMock.mockReturnValue(true);
     getPendingSyncChangeCountMock.mockResolvedValue(0);
+    cloudAuthMock.hasAcceptedLegalDocuments.mockResolvedValue(true);
   });
 
   it('opens account settings for an already signed-in user', async () => {
@@ -74,7 +79,29 @@ describe('AccountSyncScreen', () => {
 
     expect(renderText(renderer)).toContain('Profile settings');
     expect(renderText(renderer)).toContain('Automatic cloud backup');
+    expect(renderText(renderer)).toContain('Delete account and data');
     expect(renderText(renderer)).not.toContain('Sign up');
     expect(renderText(renderer)).not.toContain('Sign in');
+  });
+
+  it('requires acceptance of the current legal version before cloud features', async () => {
+    cloudAuthMock.getSession.mockResolvedValue({
+      accessToken: 'token',
+      email: 'sam@example.com',
+      userId: 'user-1',
+    });
+    cloudAuthMock.hasAcceptedLegalDocuments.mockResolvedValue(false);
+
+    let renderer: ReactTestRenderer | undefined;
+    await act(async () => {
+      renderer = create(<AccountSyncScreen initialStep="landing" />);
+    });
+
+    if (!renderer) {
+      throw new Error('AccountSyncScreen renderer was not created');
+    }
+
+    expect(renderText(renderer)).toContain('Review current terms');
+    expect(renderText(renderer)).toContain('Accept & continue');
   });
 });

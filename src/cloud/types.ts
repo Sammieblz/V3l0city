@@ -24,6 +24,8 @@ export type CloudSignUpInput = {
   password: string;
   username: string;
   displayName: string;
+  ageAttested?: boolean;
+  termsVersion?: string;
 };
 
 export type CloudSignUpResult = {
@@ -109,6 +111,9 @@ export type AuthProvider = {
   signUpWithEmail(input: CloudSignUpInput): Promise<CloudSignUpResult>;
   signInWithEmail(email: string, password: string): Promise<CloudAuthSession>;
   signOut(): Promise<void>;
+  hasAcceptedLegalDocuments(documentVersion: string): Promise<boolean>;
+  acceptLegalDocuments(documentVersion: string): Promise<void>;
+  deleteAccount(currentPassword: string): Promise<void>;
   getProfile(): Promise<CloudProfile | null>;
   upsertProfile(input: CloudProfileInput): Promise<CloudProfile>;
 };

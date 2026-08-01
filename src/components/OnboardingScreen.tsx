@@ -53,7 +53,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         Continue offline
       </Button>
       <Button mode="text" onPress={onOpenPrivacy}>
-        Privacy policy
+        Legal & privacy
       </Button>
       {!cloudConfigured && (
         <Text style={styles.helper}>

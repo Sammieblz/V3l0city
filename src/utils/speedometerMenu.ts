@@ -95,7 +95,7 @@ export const SPEEDOMETER_DRAWER_GROUPS: DrawerMenuGroupConfig[] = [
   {
     key: 'system',
     title: 'System',
-    description: 'Settings, privacy, import, export',
+    description: 'Settings, legal, import, export',
     icon: 'cog-outline',
     items: [
       {
@@ -106,8 +106,8 @@ export const SPEEDOMETER_DRAWER_GROUPS: DrawerMenuGroupConfig[] = [
       },
       {
         key: 'privacy',
-        title: 'Privacy',
-        description: 'Permissions and data storage',
+        title: 'Legal & Privacy',
+        description: 'Privacy, terms, safety, and data rights',
         icon: 'shield-lock-outline',
       },
       {
@@ -143,7 +143,7 @@ export const getSpeedometerScreenTitle = (
   if (screen === 'leaderboards') return 'Leaderboards';
   if (screen === 'friends') return 'Find Friends';
   if (screen === 'account') return 'Account / Sync';
-  if (screen === 'privacy') return 'Privacy';
+  if (screen === 'privacy') return 'Legal & Privacy';
   if (screen === 'onboarding') return 'Welcome';
   return '';
 };
