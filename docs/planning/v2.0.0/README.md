@@ -5,6 +5,7 @@ Planning baseline: October 5, 2026. This is a documentation-only proposal based 
 ## Start here
 
 - [Release tracker #8](https://github.com/Sammieblz/V3l0city/issues/8) — canonical phase gates, epic checklists and release scope.
+- [Chronological ticket guide](./chronological-ticket-guide.md) — recommended sequence for all 80 work tickets, parallel work, ongoing lanes and checkpoint evidence.
 - [Detailed analysis](./analysis.md) — source interpretation, audited code, architecture, CI/CD, test/device matrix, edge cases and open decisions.
 - [Machine-readable backlog](./backlog.json) — all published issues, source traceability, acceptance, validation and work-item dependency IDs/numbers/URLs.
 - [Future backlog #107](https://github.com/Sammieblz/V3l0city/issues/107) — every explicitly deferred feature and future candidate; no assumed release number.
