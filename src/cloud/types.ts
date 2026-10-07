@@ -50,6 +50,8 @@ export type CloudTripSyncPayload = {
 export type CloudSyncResult = {
   ok: boolean;
   syncedTripIds: string[];
+  /** Acknowledged tombstones; never infer deletion from an upload acknowledgement. */
+  deletedTripIds?: string[];
   restoredTrips: TripWithSpeedSamples[];
   message: string;
 };
@@ -114,8 +116,9 @@ export type AuthProvider = {
 };
 
 export type CloudSyncProvider = {
-  syncLocalChanges(payload: CloudTripSyncPayload): Promise<CloudSyncResult>;
-  restoreCloudTrips(): Promise<TripWithSpeedSamples[]>;
+  /** Dispatch must bind to this captured credential, never the SDK's mutable login. */
+  syncLocalChanges(payload: CloudTripSyncPayload, session: Readonly<CloudAuthSession>): Promise<CloudSyncResult>;
+  restoreCloudTrips(session: Readonly<CloudAuthSession>): Promise<TripWithSpeedSamples[]>;
 };
 
 export type SocialProvider = {

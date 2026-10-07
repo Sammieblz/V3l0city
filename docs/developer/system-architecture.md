@@ -1,5 +1,11 @@
 # System Architecture
 
+This guide describes the existing mobile/legacy telemetry architecture. The
+[v2 foundation guide](backend-foundations.md) records the owned backend target
+and what is currently implemented. Mobile cloud now defaults to Local; legacy
+Supabase auth/social requires explicit provider selection. Personal backup is
+denied until persisted account ownership and consent are integrated.
+
 V3l0city is an offline-first speedometer, trip recorder, and optional telemetry
 client. The speed engine is foreground-first, but a user-started active trip can
 run a native live drive session for widgets, Live Activities, and the Android

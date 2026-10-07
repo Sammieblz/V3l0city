@@ -1,4 +1,5 @@
 export type CloudConfig = {
+  provider: 'local' | 'owned' | 'legacy-supabase';
   enabled: boolean;
   supabaseUrl: string | null;
   supabasePublishableKey: string | null;
@@ -28,12 +29,16 @@ const normalizeKey = (value: string | undefined): string | null => {
 };
 
 export const getCloudConfig = (): CloudConfig => {
+  const selection = process.env.EXPO_PUBLIC_V3L0CITY_CLOUD_PROVIDER;
+  const provider = selection === 'legacy-supabase' || selection === 'owned' ? selection : 'local';
   const supabaseUrl = normalizeUrl(process.env.EXPO_PUBLIC_SUPABASE_URL);
   const supabasePublishableKey = normalizeKey(
     process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY
   );
   return {
-    enabled: supabaseUrl != null && supabasePublishableKey != null,
+    provider,
+    // Owned auth/sync adapter is a later dependency. Configuration alone cannot enable it.
+    enabled: provider === 'legacy-supabase' && supabaseUrl != null && supabasePublishableKey != null,
     supabaseUrl,
     supabasePublishableKey,
   };

@@ -5,6 +5,10 @@ by subsystem rather than by chronology.
 
 ## Guides
 
+- [v2 Backend Foundations](backend-foundations.md): executable runtime, portable
+  boundaries, capability inventory, ADRs and unresolved release decisions.
+- [Foundation Implementation Record](foundation-implementation-record.md): chronological
+  ticket progress, executed checks and remaining release gates.
 - [System Architecture](system-architecture.md): product constraints, runtime
   boundaries, repository layout, data flows, and the local-first rule.
 - [Mobile Frontend](mobile-frontend.md): Expo app boot, first-install

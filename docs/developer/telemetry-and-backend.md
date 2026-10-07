@@ -219,6 +219,7 @@ server/src/contracts.ts
 server/src/store.ts
 server/src/index.ts
 server/src/app.test.ts
+server/src/security.test.ts
 ```
 
 ## Backend Runtime
@@ -257,6 +258,9 @@ Responsibilities:
 - Register WebSocket route.
 - Parse bearer tokens.
 - Authenticate protected HTTP endpoints.
+- Check live authorization before each message and expire idle sockets.
+- Close sockets when grants are revoked or their trip completes.
+- Log request paths without query strings or bearer/cookie credentials.
 - Convert Zod validation errors into API error payloads.
 - Close the SQLite store when Fastify closes.
 
@@ -319,10 +323,12 @@ Responsibilities:
 - Hash tokens with SHA-256.
 - Authenticate device tokens.
 - Create trips and live sessions.
+- Atomically check trip ownership before issuing grants.
 - Validate trip access.
 - Validate live session tokens.
 - Insert sample batches.
 - Complete trips.
+- Revoke one live grant or every grant for a trip.
 - Return trip summaries.
 
 ## Server Tables
@@ -346,7 +352,8 @@ Important columns:
 - `updated_at`
 
 Registering the same install id rotates the token and updates metadata plus
-push tokens.
+push tokens. The rotation and deletion of all that device's live grants commit
+together. Existing sockets close and the old bearer token no longer authenticates.
 
 ### `trips`
 
@@ -367,6 +374,11 @@ Important columns:
 - `final_sequence`
 
 The current backend uses the client trip id as the server trip id.
+An existing active trip can be retried only by its owner. The retry issues a
+fresh grant while preserving initial trip metadata. A cross-device collision
+returns `409 trip_id_conflict` without issuing a grant or changing any trip data.
+Completed trips reject creation retries and new batches. Identical completion
+retries and already accepted batch IDs remain idempotent.
 
 ### `trip_samples`
 
@@ -405,23 +417,35 @@ new samples.
 Stores hashed WebSocket session tokens.
 
 Tokens expire after 12 hours.
+`TelemetryStore.revokeLiveSession(sessionId)` invalidates one grant;
+`revokeTripLiveSessions(tripId)` invalidates every grant for a trip. Completion
+also deletes every trip grant within the completion transaction. Validation joins
+the trip's active state, so a completed trip cannot use a leftover legacy grant.
 
 ## WebSocket Flow
 
 Connection:
 
 1. Client uses `sessionToken` from `POST /v1/trips`.
-2. Server validates session token hash and expiry.
+2. Server validates session token hash, expiry, and active trip state.
 3. Invalid sessions receive an error and close.
+4. Every incoming frame revalidates authorization before parsing or writing.
+5. An idle timer closes expired sockets. Local committed revocation notifies
+   sockets immediately; a maximum one-second poll catches other-store changes.
+6. Revoked/expired/completed sessions receive `unauthorized` and close with
+   policy code `1008`. Reconnecting with that grant is denied.
 
 Messages:
 
-- `hello`: server replies with `ack` and `lastKnownSequence`.
+- `hello`: the trip must match the URL; server replies with `ack` and
+  `lastKnownSequence`.
 - `sample_batch`: server validates and inserts samples, then replies `ack`.
-- `trip_complete`: server completes the trip and replies `ack`.
+- `trip_complete`: server completes the trip, replies `ack`, and closes the
+  connection after grant revocation.
 - `ping`: server replies `pong`.
 
 Invalid messages produce recoverable `error` messages.
+Raw malformed payloads and parser exception details are not echoed.
 
 ## Security Model
 
@@ -432,6 +456,20 @@ Current v1 model:
 - SHA-256 token hashes in SQLite.
 - Per-device trip access for HTTP endpoints.
 - Short-lived live session token for WebSocket.
+- Transactional trip ownership checks and completion/grant revocation.
+- Application request logs exclude query strings and request headers; bearer
+  and cookie redaction also protects explicit structured request logging.
+
+The legacy registration endpoint accepts an installation ID without proving
+possession of its existing token. Someone who learns that ID can rotate its
+credentials. Treat it as a registration secret until the planned account/device
+identity design replaces this adapter. This change does not make the anonymous
+adapter the v2 production identity system.
+
+Live grants still appear in URLs for client compatibility. Reverse proxies must
+omit query strings from access logs. Tests use the server's optional injected
+clock and grant lifetime to exercise exact expiry boundaries; the normal default
+remains 12 hours.
 
 Not implemented:
 
@@ -467,3 +505,9 @@ The server tests cover:
 - duplicate batch/sample handling
 - trip completion
 - WebSocket sample ack flow
+- cross-device trip-ID collision and HTTP access isolation
+- same-owner retries without metadata mutation
+- active/idle expiry, explicit revocation, token rotation, and reconnect denial
+- HTTP/WebSocket completion, unchanged completion retries, and late batch guards
+- wrong-trip hello rejection and malformed query/message handling
+- absence of bearer tokens, cookies, query values, and live grants in app logs
