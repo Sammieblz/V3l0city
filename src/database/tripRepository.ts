@@ -558,7 +558,7 @@ export const enqueueSyncOperation = async (input: {
 };
 
 export const getPendingSyncOperations = async (
-  limit = 25
+  limit: number | null = 25
 ): Promise<SyncOutboxOperation[]> => {
   try {
     const db = getDatabase();
@@ -567,7 +567,9 @@ export const getPendingSyncOperations = async (
        WHERE status IN ('pending', 'error')
        ORDER BY created_at ASC
        LIMIT ?`,
-      Math.max(1, Math.round(limit))
+      // An explicit null captures the full legacy outbox before reading trip rows.
+      // Keep the default bounded for callers that only display a preview.
+      limit === null ? -1 : Math.max(1, Math.round(limit))
     );
     return rows.map(rowToOutboxOperation);
   } catch {
@@ -623,6 +625,72 @@ export const markTripsSynced = async (
       tripId
     );
   }
+};
+
+export type CloudSyncSnapshot = Pick<Trip, 'id' | 'localUpdatedAt' | 'deletedAt'>;
+
+/** Apply a remote ACK only to the exact local mutation sent in that request.
+ * Capture operations before trip snapshots. New operations also detect edits
+ * that share the same millisecond timestamp as an older local row version. */
+export const acknowledgeCloudSync = async (
+  snapshots: readonly CloudSyncSnapshot[],
+  operations: readonly SyncOutboxOperation[],
+): Promise<string[]> => {
+  const db = getDatabase();
+  const captured = new Map(operations.map((operation) => [operation.id, operation]));
+  if (captured.size !== operations.length || new Set(snapshots.map((trip) => trip.id)).size !== snapshots.length) {
+    throw new Error('Acknowledgement snapshots and operation IDs must be unique.');
+  }
+  const applied: string[] = [];
+  const syncedAt = nowIso();
+  db.withTransactionSync(() => {
+    for (const snapshot of snapshots) {
+      if (!snapshot.localUpdatedAt) continue;
+      const desiredType = snapshot.deletedAt != null ? 'delete_trip' : 'sync_trip';
+      const pending = db.getAllSync<SyncOutboxRow & { ordinal: number }>(
+        `SELECT rowid AS ordinal, * FROM sync_outbox
+         WHERE entity_type = 'trip' AND entity_id = ?
+          AND operation_type IN ('sync_trip', 'delete_trip')
+          AND status IN ('pending', 'error')
+         ORDER BY rowid ASC`,
+        snapshot.id
+      );
+      // Do not acknowledge a changed operation or an operation absent from the
+      // request snapshot, even if the trip timestamp itself has not advanced.
+      if (pending.length === 0 || pending.some((row) => {
+        const operation = captured.get(row.id);
+        return !operation || operation.entityType !== 'trip' || operation.entityId !== snapshot.id
+          || operation.operationType !== row.operation_type || operation.payloadJson !== row.payload_json
+          || operation.createdAt !== row.created_at || operation.updatedAt !== row.updated_at
+          || !['pending', 'error'].includes(operation.status);
+      })) continue;
+      const matching = pending.filter((row) => row.operation_type === desiredType);
+      if (matching.length === 0) continue;
+      const lastDeleteOrdinal = desiredType === 'delete_trip'
+        ? matching.reduce((latest, row) => Math.max(latest, row.ordinal), -1) : -1;
+      if (pending.some((row) => row.operation_type !== desiredType
+        && !(desiredType === 'delete_trip' && row.operation_type === 'sync_trip' && row.ordinal < lastDeleteOrdinal))) continue;
+
+      const result = db.runSync(
+        `UPDATE trips SET sync_status = 'synced', cloud_synced_at = ?, cloud_sync_error = NULL
+         WHERE id = ? AND local_updated_at = ? AND deleted_at IS ?`,
+        syncedAt, snapshot.id, snapshot.localUpdatedAt, snapshot.deletedAt ?? null
+      );
+      if (result.changes !== 1) continue;
+      for (const row of pending) {
+        // A confirmed tombstone supersedes captured earlier uploads. It is not
+        // an upload ACK, and cannot consume any new or unrelated mutation.
+        db.runSync(
+          `UPDATE sync_outbox SET status = 'done', last_error = NULL, updated_at = ?
+           WHERE id = ? AND entity_type = 'trip' AND entity_id = ?
+            AND operation_type = ? AND status IN ('pending', 'error')`,
+          syncedAt, row.id, snapshot.id, row.operation_type
+        );
+      }
+      applied.push(snapshot.id);
+    }
+  });
+  return applied;
 };
 
 export const markTripSyncError = async (

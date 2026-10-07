@@ -80,3 +80,4 @@ modules/*/common/cpp/tests/.build/
 
 # Local telemetry server data
 server/data/
+dist-test/
