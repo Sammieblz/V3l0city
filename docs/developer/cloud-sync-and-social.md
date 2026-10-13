@@ -1,19 +1,32 @@
 # Cloud Sync and Social
 
-V3l0city is offline-first. Supabase adds optional accounts, cloud backup,
-restore, friends, nearby discovery, and aggregate leaderboards, but the app must
-keep working without Supabase configuration, sign-in, or network.
+V3l0city is offline-first. This guide is the legacy Supabase subsystem reference.
+The v2 development foundation defaults to Local and uses a lazy injected provider
+boundary; see [owned-domain and migration](owned-domain-and-migration.md).
+Existing cloud accounts/data must be preserved before provider retirement.
+Personal backup/restore is currently denied until persisted recording ownership
+and explicit adoption are integrated. Legacy auth/social can be enabled explicitly.
 
 ## Configuration
 
-Mobile cloud features are enabled only when both public variables are present:
+Legacy mobile auth/social requires explicit provider selection and both public
+variables. Merely retaining old environment variables does not enable a provider:
 
 ```bash
+EXPO_PUBLIC_V3L0CITY_CLOUD_PROVIDER=legacy-supabase
 EXPO_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
 EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 ```
 
 Never put a Supabase secret or service-role key in the mobile app.
+
+Absent/unknown selection uses Local. Selecting `owned` cannot enable accounts
+until its real adapter/endpoints exist. `createCloudService` accepts an injected
+provider and account-ownership port for independent tests. Its legacy sync adapter
+binds outgoing requests to the captured account token, serializes sync calls and
+uses atomic local snapshot/outbox acknowledgments. The historical sync/onboarding
+description below explains source behavior to port; it is not backup parity for
+the v2 foundation.
 
 The Supabase project scaffold lives in:
 

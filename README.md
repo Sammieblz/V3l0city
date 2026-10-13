@@ -4,6 +4,7 @@ Digital speedometer built with Expo and React Native.
 
 ## Docs
 
+- [v2 backend foundations](docs/developer/backend-foundations.md): current implementation, architecture decisions and validation commands.
 - [Developer guide](docs/developer-guide.md): technical documentation entry point and reading order.
 - [Developer docs](docs/developer/README.md): subsystem docs for architecture, mobile frontend, native speed engine, local data, telemetry/backend, cloud/social, testing, and code ownership.
 - [User guide](docs/user-guide.md): customer-facing guide for using V3l0city on iOS and Android, including onboarding, trips, settings, history, export, permissions, privacy, and troubleshooting.

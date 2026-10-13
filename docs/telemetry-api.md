@@ -16,6 +16,10 @@ Start the backend:
 npm run server:dev
 ```
 
+For compiled execution use `npm run server:build` followed by
+`npm run server:start`. See [backend foundations](developer/backend-foundations.md)
+for validated environment configuration, health and shutdown behavior.
+
 The server defaults are:
 
 - `PORT=8787`
@@ -92,7 +96,13 @@ Response:
 }
 ```
 
-Registering the same `installId` rotates the token and updates platform/app metadata.
+Registering the same `installId` rotates the bearer token, updates platform/app
+metadata, and revokes all previously issued live grants for that device. Open
+live sockets close with code `1008`; old bearer tokens receive `401`.
+
+This legacy anonymous registration endpoint treats the installation ID as its
+registration credential. It does not establish user-account identity or prove
+possession of an existing bearer token when rotating one.
 
 ### Start Trip
 
@@ -120,7 +130,15 @@ Response:
 }
 ```
 
-The current backend uses the client trip id as the server trip id. Creating the same trip again updates mutable metadata and issues a fresh live session.
+The current backend uses the client trip id as the server trip id. An active
+trip retry by its original device preserves the trip's initial metadata and
+issues a fresh live grant. Existing unrevoked grants remain valid until expiry
+or completion. Creation and ownership checks run in one SQLite write transaction.
+
+If another device already owns that ID, the response is `409` with
+`code: "trip_id_conflict"`; no grant is issued and no metadata changes. Retry
+with a new unique client trip ID. If the original device has completed that
+trip, creation returns `409` with `code: "trip_completed"`.
 
 ### Upload Sample Batch
 
@@ -179,6 +197,8 @@ Rules:
 - Duplicate `batchId` returns `duplicate: true` and inserts nothing.
 - Duplicate sample sequences are ignored with `INSERT OR IGNORE`.
 - `speedMps` and aggregate speed fields are capped by schema at `120 m/s`.
+- A completed trip rejects new batch IDs with `409` (`trip_completed`). A
+  previously accepted batch ID still returns its stored duplicate acknowledgement.
 
 ### Complete Trip
 
@@ -205,6 +225,12 @@ Response:
 }
 ```
 
+Completion durably stores the aggregates and revokes all live grants in one
+transaction. Open sockets close with code `1008`, and old live tokens cannot
+reconnect. An identical completion retry succeeds; changing completion fields
+after completion returns `409` (`trip_completed`). Upload pending samples before
+completing the trip.
+
 ### Debug Trip Summary
 
 `GET /v1/trips/:tripId`
@@ -219,7 +245,20 @@ Endpoint:
 /v1/trips/:tripId/live?sessionToken=<token>
 ```
 
-The session token comes from `POST /v1/trips` and expires after 12 hours.
+The session token comes from `POST /v1/trips` and expires after 12 hours by default.
+The server checks authorization on connection and before every incoming message.
+Idle connections also close at expiry; a stored expiry equal to the current time
+is already expired. Revocation, device-token rotation, or completion invalidate
+existing connections and prevent reconnecting with that token. Local revocation
+closes sockets immediately after the database transaction commits; the legacy
+SQLite server also polls authorization at most one second apart to detect
+changes through another store connection. Unauthorized sessions receive a
+generic `unauthorized` error and close with code `1008`.
+
+`hello.tripId` must match the trip in the connection URL. A WebSocket
+`trip_complete` sends its completion acknowledgement before closing the socket.
+Administrative server code can revoke a single live session or all sessions for
+a trip through the store; there is no public revocation endpoint in this adapter.
 
 Client messages:
 
@@ -254,6 +293,11 @@ Server messages:
 ```
 
 The mobile app sends live WebSocket batches of five 2 Hz samples. Acknowledged sequences are marked uploaded locally. If WebSocket is unavailable, samples remain local and are uploaded later over HTTP.
+
+Application request logs retain the method and URL path, omit query strings and
+request headers, and redact bearer/cookie headers. Errors do not echo raw payloads
+or credentials. The legacy live URL still carries a grant in its query string;
+configure proxy/access logging to omit queries too. Do not publish a live URL.
 
 ## Mobile Flow
 

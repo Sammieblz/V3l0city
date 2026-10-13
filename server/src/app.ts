@@ -9,12 +9,22 @@ import {
   startTripSchema,
   wsMessageSchema,
 } from './contracts';
-import { TelemetryStore } from './store';
+import { TelemetryStore, TelemetryStoreError } from './store';
 
 type BuildServerOptions = {
   dbPath?: string;
   logger?: boolean;
+  loggerStream?: { write(message: string): void };
+  now?: () => number;
+  liveSessionTtlMs?: number;
+  publicWsUrl?: string;
 };
+
+const storeErrorBody = (error: TelemetryStoreError) => ({
+  code: error.code,
+  message: error.message,
+  recoverable: false,
+});
 
 const bearerToken = (request: FastifyRequest): string | null => {
   const header = request.headers.authorization;
@@ -52,9 +62,10 @@ const authenticate = (
   return deviceId;
 };
 
-const publicWsBaseUrl = (request: FastifyRequest) => {
-  if (process.env.V3L0CITY_PUBLIC_WS_URL) {
-    return process.env.V3L0CITY_PUBLIC_WS_URL.replace(/\/$/, '');
+const publicWsBaseUrl = (request: FastifyRequest, options: BuildServerOptions) => {
+  const configured = options.publicWsUrl ?? process.env.V3L0CITY_PUBLIC_WS_URL;
+  if (configured) {
+    return configured.replace(/\/$/, '');
   }
   const host = request.headers.host ?? 'localhost:8787';
   return `ws://${host}`;
@@ -63,8 +74,36 @@ const publicWsBaseUrl = (request: FastifyRequest) => {
 export const buildServer = async (
   options: BuildServerOptions = {}
 ): Promise<{ app: FastifyInstance; store: TelemetryStore }> => {
-  const store = new TelemetryStore(options.dbPath);
-  const app = Fastify({ logger: options.logger ?? false });
+  const now = options.now ?? Date.now;
+  const store = new TelemetryStore(options.dbPath, {
+    now,
+    liveSessionTtlMs: options.liveSessionTtlMs,
+  });
+  const app = Fastify({
+    logger: options.logger ? {
+      stream: options.loggerStream,
+      // Live grants remain in the legacy URL contract, so log only its path.
+      serializers: { req: (request) => ({ method: request.method, url: request.url?.split('?')[0] }) },
+      redact: ['req.headers.authorization', 'req.headers.cookie'],
+    } : false,
+  });
+
+  app.setErrorHandler((error, request, reply) => {
+    if (error instanceof TelemetryStoreError) {
+      return reply.code(error.code === 'trip_not_found' ? 404 : 409).send(storeErrorBody(error));
+    }
+    const candidate = typeof error === 'object' && error !== null && 'statusCode' in error
+      ? error.statusCode : undefined;
+    const statusCode = typeof candidate === 'number' && candidate >= 400 && candidate <= 599
+      ? candidate : 500;
+    // Parser/validation errors can include excerpts of credential-bearing input.
+    request.log.error({ statusCode }, 'Request failed.');
+    return reply.code(statusCode).send({
+      code: 'request_failed',
+      message: 'Request could not be completed.',
+      recoverable: statusCode >= 500,
+    });
+  });
 
   await app.register(websocketPlugin);
 
@@ -90,7 +129,7 @@ export const buildServer = async (
     const session = store.createTrip(deviceId, parsed.data);
     return {
       ...session,
-      wsUrl: `${publicWsBaseUrl(request)}/v1/trips/${encodeURIComponent(
+      wsUrl: `${publicWsBaseUrl(request, options)}/v1/trips/${encodeURIComponent(
         session.tripId
       )}/live?sessionToken=${encodeURIComponent(session.sessionToken)}`,
     };
@@ -165,24 +204,56 @@ export const buildServer = async (
 
   app.get('/v1/trips/:tripId/live', { websocket: true }, (socket, request) => {
     const { tripId } = request.params as { tripId: string };
-    const { sessionToken } = request.query as { sessionToken?: string };
+    const { sessionToken } = request.query as { sessionToken?: unknown };
     const liveSession =
-      sessionToken == null ? null : store.validateLiveSession(tripId, sessionToken);
+      typeof sessionToken !== 'string' ? null : store.validateLiveSession(tripId, sessionToken);
+
+    const closeUnauthorized = () => {
+      if (socket.readyState !== socket.OPEN) return;
+      socket.send(JSON.stringify({
+        type: 'error',
+        code: 'unauthorized',
+        message: 'A valid live session token is required.',
+        recoverable: false,
+      }));
+      socket.close(1008, 'Live session is no longer authorized.');
+    };
 
     if (!liveSession) {
-      socket.send(
-        JSON.stringify({
-          type: 'error',
-          code: 'unauthorized',
-          message: 'A valid live session token is required.',
-          recoverable: false,
-        })
-      );
-      socket.close();
+      closeUnauthorized();
       return;
     }
 
+    const authorized = () => typeof sessionToken === 'string' &&
+      store.validateLiveSession(tripId, sessionToken) != null;
+    const unsubscribe = store.onLiveSessionsRevoked((event) => {
+      if (event.tripId === tripId && (!event.sessionId || event.sessionId === liveSession.id)) {
+        // A WS completion must send its durable acknowledgement before closing.
+        queueMicrotask(closeUnauthorized);
+      }
+    });
+    let expiryTimer: ReturnType<typeof setTimeout> | undefined;
+    const checkSession = () => {
+      if (socket.readyState !== socket.OPEN) return;
+      if (!authorized()) {
+        closeUnauthorized();
+        return;
+      }
+      expiryTimer = setTimeout(checkSession,
+        Math.max(1, Math.min(1000, Date.parse(liveSession.expires_at) - now())));
+      expiryTimer.unref();
+    };
+    checkSession();
+    socket.on('close', () => {
+      clearTimeout(expiryTimer);
+      unsubscribe();
+    });
+
     socket.on('message', (raw) => {
+      if (!authorized()) {
+        closeUnauthorized();
+        return;
+      }
       try {
         const json = JSON.parse(raw.toString());
         const parsed = wsMessageSchema.parse(json);
@@ -193,6 +264,10 @@ export const buildServer = async (
         }
 
         if (parsed.type === 'hello') {
+          if (parsed.tripId !== tripId) {
+            closeUnauthorized();
+            return;
+          }
           socket.send(
             JSON.stringify({
               type: 'ack',
@@ -227,14 +302,14 @@ export const buildServer = async (
           })
         );
       } catch (error) {
-        const message =
-          error instanceof Error ? error.message : 'Invalid WebSocket message.';
         socket.send(
           JSON.stringify({
             type: 'error',
-            code: 'invalid_message',
-            message,
-            recoverable: true,
+            ...(error instanceof TelemetryStoreError ? storeErrorBody(error) : {
+              code: 'invalid_message',
+              message: 'Invalid WebSocket message.',
+              recoverable: true,
+            }),
           })
         );
       }

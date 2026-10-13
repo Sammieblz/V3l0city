@@ -55,6 +55,23 @@ export type BatchResult = {
   duplicate: boolean;
 };
 
+export class TelemetryStoreError extends Error {
+  constructor(
+    readonly code: 'trip_id_conflict' | 'trip_completed' | 'trip_not_found',
+    message: string
+  ) {
+    super(message);
+    this.name = 'TelemetryStoreError';
+  }
+}
+
+type StoreOptions = {
+  now?: () => number;
+  liveSessionTtlMs?: number;
+};
+
+type SessionRevocation = { tripId: string; sessionId?: string };
+
 const tokenHash = (token: string): string =>
   createHash('sha256').update(token).digest('hex');
 
@@ -62,8 +79,16 @@ const createToken = (): string => randomUUID().replace(/-/g, '') + randomUUID().
 
 export class TelemetryStore {
   private readonly db: Database.Database;
+  private readonly now: () => number;
+  private readonly liveSessionTtlMs: number;
+  private readonly revocationListeners = new Set<(event: SessionRevocation) => void>();
 
-  constructor(dbPath = 'server/data/v3l0city.sqlite') {
+  constructor(dbPath = 'server/data/v3l0city.sqlite', options: StoreOptions = {}) {
+    this.now = options.now ?? Date.now;
+    this.liveSessionTtlMs = options.liveSessionTtlMs ?? 12 * 60 * 60 * 1000;
+    if (!Number.isFinite(this.liveSessionTtlMs) || this.liveSessionTtlMs <= 0) {
+      throw new Error('Live session lifetime must be a positive finite duration.');
+    }
     if (dbPath !== ':memory:') {
       mkdirSync(dirname(dbPath), { recursive: true });
     }
@@ -73,31 +98,107 @@ export class TelemetryStore {
   }
 
   close() {
-    this.db.close();
+    this.revocationListeners.clear();
+    if (this.db.open) this.db.close();
+  }
+
+  isReady(): boolean {
+    try {
+      return this.db.open && this.db.prepare('SELECT 1 AS ready').get() != null;
+    } catch {
+      return false;
+    }
+  }
+
+  onLiveSessionsRevoked(listener: (event: SessionRevocation) => void): () => void {
+    this.revocationListeners.add(listener);
+    return () => { this.revocationListeners.delete(listener); };
+  }
+
+  revokeLiveSession(sessionId: string): void {
+    const session = this.db.transaction(() => {
+      const found = this.db.prepare('SELECT trip_id FROM live_sessions WHERE id = ?')
+        .get(sessionId) as { trip_id: string } | undefined;
+      if (found) this.db.prepare('DELETE FROM live_sessions WHERE id = ?').run(sessionId);
+      return found;
+    }).immediate();
+    if (!session) return;
+    this.notifyRevocation({ tripId: session.trip_id, sessionId });
+  }
+
+  revokeTripLiveSessions(tripId: string): void {
+    this.db.prepare('DELETE FROM live_sessions WHERE trip_id = ?').run(tripId);
+    this.notifyRevocation({ tripId });
+  }
+
+  private notifyRevocation(event: SessionRevocation): void {
+    for (const listener of this.revocationListeners) listener(event);
   }
 
   registerDevice(input: RegisterDeviceInput): RegisteredDevice {
-    const existing = this.db
-      .prepare('SELECT id, token_hash FROM devices WHERE install_id = ?')
-      .get(input.installId) as DeviceRow | undefined;
-    const deviceToken = createToken();
-    const now = new Date().toISOString();
+    const revokedTripIds: string[] = [];
+    const registration = this.db.transaction(() => {
+      const existing = this.db
+        .prepare('SELECT id, token_hash FROM devices WHERE install_id = ?')
+        .get(input.installId) as DeviceRow | undefined;
+      const deviceToken = createToken();
+      const now = new Date(this.now()).toISOString();
 
-    if (existing) {
+      if (existing) {
+        this.db
+          .prepare(
+            `UPDATE devices
+             SET token_hash = ?,
+              platform = ?,
+              app_version = ?,
+              build_number = ?,
+              expo_push_token = ?,
+              native_push_token = ?,
+              push_platform = ?,
+              updated_at = ?
+             WHERE id = ?`
+          )
+          .run(
+            tokenHash(deviceToken),
+            input.platform,
+            input.appVersion,
+            input.buildNumber,
+            input.expoPushToken ?? null,
+            input.nativePushToken ?? null,
+            input.pushPlatform ?? null,
+            now,
+            existing.id
+          );
+        const trips = this.db.prepare('SELECT id FROM trips WHERE device_id = ?')
+          .all(existing.id) as { id: string }[];
+        this.db.prepare('DELETE FROM live_sessions WHERE trip_id IN (SELECT id FROM trips WHERE device_id = ?)')
+          .run(existing.id);
+        revokedTripIds.push(...trips.map((trip) => trip.id));
+        return { deviceId: existing.id, deviceToken };
+      }
+
+      const deviceId = randomUUID();
       this.db
         .prepare(
-          `UPDATE devices
-           SET token_hash = ?,
-            platform = ?,
-            app_version = ?,
-            build_number = ?,
-            expo_push_token = ?,
-            native_push_token = ?,
-            push_platform = ?,
-            updated_at = ?
-           WHERE id = ?`
+          `INSERT INTO devices
+            (
+              id,
+              install_id,
+              token_hash,
+              platform,
+              app_version,
+              build_number,
+              expo_push_token,
+              native_push_token,
+              push_platform,
+              created_at,
+              updated_at
+            )
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .run(
+          deviceId,
+          input.installId,
           tokenHash(deviceToken),
           input.platform,
           input.appVersion,
@@ -106,44 +207,12 @@ export class TelemetryStore {
           input.nativePushToken ?? null,
           input.pushPlatform ?? null,
           now,
-          existing.id
+          now
         );
-      return { deviceId: existing.id, deviceToken };
-    }
-
-    const deviceId = randomUUID();
-    this.db
-      .prepare(
-        `INSERT INTO devices
-          (
-            id,
-            install_id,
-            token_hash,
-            platform,
-            app_version,
-            build_number,
-            expo_push_token,
-            native_push_token,
-            push_platform,
-            created_at,
-            updated_at
-          )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      )
-      .run(
-        deviceId,
-        input.installId,
-        tokenHash(deviceToken),
-        input.platform,
-        input.appVersion,
-        input.buildNumber,
-        input.expoPushToken ?? null,
-        input.nativePushToken ?? null,
-        input.pushPlatform ?? null,
-        now,
-        now
-      );
-    return { deviceId, deviceToken };
+      return { deviceId, deviceToken };
+    }).immediate();
+    for (const tripId of revokedTripIds) this.notifyRevocation({ tripId });
+    return registration;
   }
 
   authenticateDevice(deviceToken: string): string | null {
@@ -154,41 +223,36 @@ export class TelemetryStore {
   }
 
   createTrip(deviceId: string, input: StartTripInput): TripSession {
-    const now = new Date().toISOString();
-    const tripId = input.clientTripId;
-    this.db
-      .prepare(
-        `INSERT INTO trips
-          (id, device_id, client_trip_id, started_at, units, mount_label, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET
-          updated_at = excluded.updated_at,
-          units = excluded.units,
-          mount_label = excluded.mount_label`
-      )
-      .run(
-        tripId,
-        deviceId,
-        input.clientTripId,
-        input.startedAt,
-        input.units,
-        input.mountLabel ?? null,
-        now,
-        now
-      );
+    return this.db.transaction(() => {
+      const now = new Date(this.now()).toISOString();
+      const tripId = input.clientTripId;
+      const existing = this.db.prepare('SELECT device_id, ended_at FROM trips WHERE id = ?')
+        .get(tripId) as { device_id: string; ended_at: string | null } | undefined;
+      if (existing && existing.device_id !== deviceId) {
+        throw new TelemetryStoreError('trip_id_conflict', 'The requested trip identifier is unavailable.');
+      }
+      if (existing?.ended_at != null) {
+        throw new TelemetryStoreError('trip_completed', 'A completed trip cannot create a live session.');
+      }
+      if (!existing) {
+        this.db.prepare(
+          `INSERT INTO trips
+            (id, device_id, client_trip_id, started_at, units, mount_label, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        ).run(tripId, deviceId, input.clientTripId, input.startedAt, input.units,
+          input.mountLabel ?? null, now, now);
+      }
 
-    const liveSessionId = randomUUID();
-    const sessionToken = createToken();
-    const expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
-    this.db
-      .prepare(
+      const liveSessionId = randomUUID();
+      const sessionToken = createToken();
+      const expiresAt = new Date(this.now() + this.liveSessionTtlMs).toISOString();
+      this.db.prepare(
         `INSERT INTO live_sessions
           (id, trip_id, token_hash, expires_at, created_at)
          VALUES (?, ?, ?, ?, ?)`
-      )
-      .run(liveSessionId, tripId, tokenHash(sessionToken), expiresAt, now);
-
-    return { tripId, liveSessionId, sessionToken };
+      ).run(liveSessionId, tripId, tokenHash(sessionToken), expiresAt, now);
+      return { tripId, liveSessionId, sessionToken };
+    }).immediate();
   }
 
   validateTripAccess(deviceId: string, tripId: string): boolean {
@@ -201,45 +265,51 @@ export class TelemetryStore {
   validateLiveSession(tripId: string, sessionToken: string): LiveSessionRow | null {
     const row = this.db
       .prepare(
-        `SELECT id, trip_id, token_hash, expires_at
-         FROM live_sessions
-         WHERE trip_id = ? AND token_hash = ?`
+        `SELECT live_sessions.id, live_sessions.trip_id, live_sessions.token_hash, live_sessions.expires_at
+         FROM live_sessions JOIN trips ON trips.id = live_sessions.trip_id
+         WHERE live_sessions.trip_id = ? AND live_sessions.token_hash = ? AND trips.ended_at IS NULL`
       )
       .get(tripId, tokenHash(sessionToken)) as LiveSessionRow | undefined;
 
-    if (!row || new Date(row.expires_at).getTime() < Date.now()) {
+    if (!row || !Number.isFinite(Date.parse(row.expires_at)) || Date.parse(row.expires_at) <= this.now()) {
       return null;
     }
     return row;
   }
 
   insertBatch(tripId: string, batch: SampleBatchInput): BatchResult {
-    const existing = this.db
-      .prepare('SELECT last_sequence FROM upload_batches WHERE trip_id = ? AND batch_id = ?')
-      .get(tripId, batch.batchId) as { last_sequence: number } | undefined;
-    if (existing) {
-      return { inserted: 0, lastSequence: existing.last_sequence, duplicate: true };
-    }
+    return this.db.transaction(() => {
+      const existing = this.db
+        .prepare('SELECT last_sequence FROM upload_batches WHERE trip_id = ? AND batch_id = ?')
+        .get(tripId, batch.batchId) as { last_sequence: number } | undefined;
+      if (existing) {
+        return { inserted: 0, lastSequence: existing.last_sequence, duplicate: true };
+      }
+      const trip = this.db.prepare('SELECT ended_at FROM trips WHERE id = ?')
+        .get(tripId) as { ended_at: string | null } | undefined;
+      if (!trip) throw new TelemetryStoreError('trip_not_found', 'Trip was not found.');
+      if (trip.ended_at != null) {
+        throw new TelemetryStoreError('trip_completed', 'A completed trip cannot accept new sample batches.');
+      }
 
-    const insertSample = this.db.prepare(
-      `INSERT OR IGNORE INTO trip_samples
-        (trip_id, sequence, recorded_at, elapsed_ms, speed_mps, distance_meters,
-         heading_degrees, heading_source, heading_accuracy_degrees, heading_quality,
-         heading_reasons, source, quality, quality_score, quality_reasons,
-         gps_accuracy_meters, fix_age_ms, native_speed_used, is_moving, is_stopped, stale)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    );
-    const insertBatch = this.db.prepare(
-      `INSERT INTO upload_batches
-        (trip_id, batch_id, sample_count, last_sequence, received_at)
-       VALUES (?, ?, ?, ?, ?)`
-    );
-    const updateTrip = this.db.prepare('UPDATE trips SET updated_at = ? WHERE id = ?');
-    const now = new Date().toISOString();
-    let inserted = 0;
-    let lastSequence = 0;
+      const insertSample = this.db.prepare(
+        `INSERT OR IGNORE INTO trip_samples
+          (trip_id, sequence, recorded_at, elapsed_ms, speed_mps, distance_meters,
+           heading_degrees, heading_source, heading_accuracy_degrees, heading_quality,
+           heading_reasons, source, quality, quality_score, quality_reasons,
+           gps_accuracy_meters, fix_age_ms, native_speed_used, is_moving, is_stopped, stale)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      );
+      const insertBatch = this.db.prepare(
+        `INSERT INTO upload_batches
+          (trip_id, batch_id, sample_count, last_sequence, received_at)
+         VALUES (?, ?, ?, ?, ?)`
+      );
+      const updateTrip = this.db.prepare('UPDATE trips SET updated_at = ? WHERE id = ?');
+      const now = new Date(this.now()).toISOString();
+      let inserted = 0;
+      let lastSequence = 0;
 
-    this.db.transaction(() => {
       for (const sample of batch.samples) {
         const result = insertSample.run(
           tripId,
@@ -269,32 +339,50 @@ export class TelemetryStore {
       }
       insertBatch.run(tripId, batch.batchId, batch.samples.length, lastSequence, now);
       updateTrip.run(now, tripId);
-    })();
-
-    return { inserted, lastSequence, duplicate: false };
+      return { inserted, lastSequence, duplicate: false };
+    }).immediate();
   }
 
   completeTrip(tripId: string, input: CompleteTripInput): void {
-    this.db
-      .prepare(
-        `UPDATE trips SET
-          ended_at = ?,
-          total_distance_meters = ?,
-          max_speed_mps = ?,
-          average_speed_mps = ?,
-          final_sequence = ?,
-          updated_at = ?
-         WHERE id = ?`
-      )
-      .run(
-        input.endedAt,
-        input.totalDistanceMeters,
-        input.maxSpeedMps,
-        input.averageSpeedMps,
-        input.finalSequence,
-        new Date().toISOString(),
-        tripId
-      );
+    this.db.transaction(() => {
+      const trip = this.db.prepare('SELECT * FROM trips WHERE id = ?')
+        .get(tripId) as TripRow | undefined;
+      if (!trip) throw new TelemetryStoreError('trip_not_found', 'Trip was not found.');
+      if (trip.ended_at != null) {
+        if (trip.ended_at !== input.endedAt ||
+          trip.total_distance_meters !== input.totalDistanceMeters ||
+          trip.max_speed_mps !== input.maxSpeedMps ||
+          trip.average_speed_mps !== input.averageSpeedMps ||
+          trip.final_sequence !== input.finalSequence) {
+          throw new TelemetryStoreError('trip_completed', 'A completed trip cannot be changed.');
+        }
+        this.db.prepare('DELETE FROM live_sessions WHERE trip_id = ?').run(tripId);
+        return;
+      }
+      this.db
+        .prepare(
+          `UPDATE trips SET
+            ended_at = ?,
+            total_distance_meters = ?,
+            max_speed_mps = ?,
+            average_speed_mps = ?,
+            final_sequence = ?,
+            updated_at = ?
+           WHERE id = ?`
+        )
+        .run(
+          input.endedAt,
+          input.totalDistanceMeters,
+          input.maxSpeedMps,
+          input.averageSpeedMps,
+          input.finalSequence,
+          new Date(this.now()).toISOString(),
+          tripId
+        );
+      this.db.prepare('DELETE FROM live_sessions WHERE trip_id = ?').run(tripId);
+    }).immediate();
+    // Notify only after commit so active sockets observe durable revocation.
+    this.notifyRevocation({ tripId });
   }
 
   getTripSummary(tripId: string): (TripRow & { sampleCount: number }) | null {

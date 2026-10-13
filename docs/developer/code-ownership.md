@@ -20,6 +20,10 @@ it. This is not ownership by person. It is ownership by subsystem.
 | Mobile telemetry | `src/api/*` | telemetry Jest tests |
 | Cloud sync/social | `src/cloud/*`, `supabase/**`, cloud screens | TypeScript, Jest, Supabase migration/advisor checks |
 | Server API | `server/src/app.ts`, `server/src/contracts.ts`, `server/src/store.ts` | `npm run server:test` |
+| Owned backend boot/config | `server/src/config.ts`, `runtime.ts`, `index.ts`, `server/tsconfig*.json` | Compiled build, runtime/failed-boot/shutdown tests |
+| Product contracts | `shared/contracts/**`, `docs/api/**` | `npm run shared:test`, `npm run contracts:check`; declarations do not prove runtime authorization |
+| PostgreSQL migrations | `server/src/db/**`, `server/migrations/**` | Real PostgreSQL bootstrap/upgrade/concurrency/permission tests; migration docs |
+| Connected authority/adoption | `src/domain/connectedTrip.ts`, `recordingOwnership.ts`, `src/cloud/providers.ts` | Local isolation, account-switch/adoption and provider fixtures |
 | Docs | `README.md`, `docs/**` | link/typo scan |
 
 ## By Feature

@@ -52,6 +52,10 @@ iOS and Android speed-engine testing.
 
 ## Backend
 
+The [v2 foundation guide](backend-foundations.md) describes validated deployment
+configuration and the current telemetry-only health endpoints. Product `/v2`
+contracts are declared separately and are not mounted yet.
+
 Development server:
 
 ```bash
@@ -61,8 +65,16 @@ npm run server:dev
 Single-run server:
 
 ```bash
+npm run server:build
 npm run server:start
 ```
+
+Run the compiled server suite with `npm run server:test`, shared contracts with
+`npm run shared:test`, and generated contract drift with `npm run contracts:check`.
+PostgreSQL integration requires an isolated `TEST_DATABASE_URL`; see
+[PostgreSQL operations](postgresql.md). No database URL means those integration
+tests are skipped, not accepted as passing. On Windows use `.cmd` wrappers when
+PowerShell execution policy blocks `.ps1`.
 
 Default backend values:
 
