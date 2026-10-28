@@ -6,8 +6,15 @@ environment variables, and common troubleshooting paths.
 ## Install
 
 ```bash
-npm install
+npm ci
 ```
+
+Use the Node version in the root `.node-version` (24.19.0 for this foundation).
+The root and independent `web/` project have separate lockfiles: run `npm ci` in
+each directory. Keep generated dependency directories and real `.env` files out
+of commits. Windows shells can use `npm.cmd`/`npx.cmd` when PowerShell blocks
+the `.ps1` wrappers. Native builds still require the platform's Xcode/CocoaPods
+or Android SDK/JDK toolchain.
 
 ## Run the App
 
@@ -39,13 +46,32 @@ The independent public Next.js site is run and validated from `web/`:
 
 ```bash
 cd web
+npm ci
 npm run dev
 npm run lint
 npm run typecheck
 npm run test
-npm run build
+npm run build:ci
+npx playwright install chromium
 npm run test:e2e
 ```
+
+`build:ci` creates a production Next.js artifact using synthetic public/legal
+values, disables reuse of repository-root provider configuration and leaves
+hosted authentication/CAPTCHA disabled. Always run it immediately before E2E;
+`test:e2e` requires `.next/BUILD_ID` and starts `next start` at
+`http://127.0.0.1:3100`. It fails if another server owns that port, rather than
+testing a previously running development server. The ordinary `build` and
+`start` commands retain the existing web deployment configuration.
+
+CI installs browser/system dependencies with
+`npx playwright install --with-deps chromium`. Both desktop and mobile-emulation
+projects run public navigation, theme, metadata, demo and unavailable-auth
+journeys. Cross-origin browser requests are blocked in these fixtures. HTML,
+JUnit, trace and screenshot artifacts under `web/playwright-report/` and
+`web/test-results/` contain only synthetic public journeys; do not add real
+accounts/tokens to these tests. This is browser emulation, not physical-phone
+or owned-backend integration evidence.
 
 The native speed engine is not available in Expo Go. Use development builds for
 iOS and Android speed-engine testing.
@@ -76,6 +102,12 @@ PostgreSQL integration requires an isolated `TEST_DATABASE_URL`; see
 tests are skipped, not accepted as passing. On Windows use `.cmd` wrappers when
 PowerShell execution policy blocks `.ps1`.
 
+For required checks, use `npm run server:test:ci` with an explicit disposable
+`TEST_DATABASE_URL`, for example a separately provisioned PostgreSQL database
+named `v3l0city_ci_test`. The CI command rejects a missing URL; the database
+suite validates its isolated test target. Never aim it at a retained account or
+production database. See the PostgreSQL guide for required fixture privileges.
+
 Default backend values:
 
 - `PORT=8787`
@@ -87,12 +119,28 @@ Default backend values:
 Run these before handing off meaningful changes:
 
 ```bash
-npx tsc --noEmit
-npx jest --runInBand
+npm run typecheck
+npm run test:ci
 npm run lint
 npm run test:speed-engine:cpp
-npm run server:test
+npm run server:test:ci
+npm run shared:test
+npm run contracts:check
+npm run docs:check
 ```
+
+Set the isolated PostgreSQL URL before the server command. Unit success with
+database tests skipped does not satisfy this matrix. C++ regressions are a
+mandatory independent gate; a coverage percentage or UI snapshot cannot waive
+them. Do not run concurrent build/contract commands against the same `dist/`
+directory. Separate CI jobs use separate checkouts; sequential steps may share
+their own outputs.
+
+The [PR checklist](../../.github/pull_request_template.md) records the exact
+commit, fixtures, commands, results and outstanding gates. Branch-required
+checks must match checks that actually execute; an existing Vercel deployment
+status alone is not mobile/server/C++/database test evidence. This foundation
+does not complete release-wide #32, #33 or #48 acceptance.
 
 Native build validation:
 
@@ -122,7 +170,7 @@ Use full native builds after changes to:
 ### TypeScript
 
 ```bash
-npx tsc --noEmit
+npm run typecheck
 ```
 
 Validates TypeScript across app and server code.
@@ -130,7 +178,7 @@ Validates TypeScript across app and server code.
 ### Jest
 
 ```bash
-npx jest --runInBand
+npm run test:ci
 ```
 
 Covers:
@@ -168,7 +216,7 @@ Covers:
 ### Server
 
 ```bash
-npm run server:test
+npm run server:test:ci
 ```
 
 Covers:
@@ -295,7 +343,12 @@ Moving samples should show `headingSource=course`; stopped or slow samples
 should show `headingSource=device` when rotation-vector data is available, or
 `none` when the simulator has no usable compass fallback.
 
-## v1.0.0 Release Readiness
+## Historical v1.0.0 Release Readiness
+
+The checklist below describes the retained v1 release and legacy provider
+paths. It is historical compatibility guidance, not the setup requirement or
+acceptance claim for the owned v2 backend. The v2 provider transition and data
+preservation gates are documented in [domain and migration foundations](owned-domain-and-migration.md).
 
 V3l0city v1.0.0 excludes CarPlay and Android Auto from production binaries.
 Widgets, iOS Live Activity, Android widgets, and the Android active-trip
@@ -346,15 +399,21 @@ EXPO_PUBLIC_V3L0CITY_WS_URL=ws://<lan-ip>:8787
 
 Telemetry is disabled unless both are valid.
 
-### Supabase Cloud and Social
+### Retained Legacy Mobile Auth and Social
 
 ```bash
+EXPO_PUBLIC_V3L0CITY_CLOUD_PROVIDER=legacy-supabase
 EXPO_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
 EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 ```
 
-Cloud sync, account, friends, nearby discovery, and leaderboards are disabled
-unless both are valid. The local app continues to work without them.
+Local is the default even when the two old public values exist. The explicit
+provider selection and valid public configuration enable only the retained
+legacy adapter. Personal backup/restore denies access pending persisted
+recording ownership and adoption consent; onboarding/sign-in must not upload
+unclaimed local history. Existing provider accounts/data must be preserved.
+The independent Next.js site's legacy adapter is separate and still awaits the
+v2 migration/parity work; public smoke tests do not verify that hosted adapter.
 
 ### Drive Simulation
 
@@ -462,15 +521,20 @@ the config loader.
 
 ### Cloud sync disabled
 
-Check both Supabase mobile env vars:
+Check the deliberate legacy provider selection and its public configuration:
 
 ```bash
+EXPO_PUBLIC_V3L0CITY_CLOUD_PROVIDER=legacy-supabase
 EXPO_PUBLIC_SUPABASE_URL
 EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 ```
 
 Use a publishable key only. Never expose a Supabase secret or service-role key
 in the app bundle.
+
+Personal backup/restore remains unavailable until persisted ownership/adoption
+is wired, even with a valid legacy login. Keep local history/export available;
+do not work around that gate by uploading every recording to the active user.
 
 ### Precise location required
 

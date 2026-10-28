@@ -1,4 +1,5 @@
 import websocketPlugin from '@fastify/websocket';
+import { randomUUID } from 'node:crypto';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { z } from 'zod';
 
@@ -10,11 +11,14 @@ import {
   wsMessageSchema,
 } from './contracts';
 import { TelemetryStore, TelemetryStoreError } from './store';
+import { createWritableObservationWriter, metricsAuthorized, TelemetryObservability, validateMetricsToken, type ObservationWriter } from './observability';
 
 type BuildServerOptions = {
   dbPath?: string;
   logger?: boolean;
-  loggerStream?: { write(message: string): void };
+  loggerStream?: ObservationWriter;
+  observationClock?: () => number;
+  metricsToken?: string;
   now?: () => number;
   liveSessionTtlMs?: number;
   publicWsUrl?: string;
@@ -73,20 +77,48 @@ const publicWsBaseUrl = (request: FastifyRequest, options: BuildServerOptions) =
 
 export const buildServer = async (
   options: BuildServerOptions = {}
-): Promise<{ app: FastifyInstance; store: TelemetryStore }> => {
+): Promise<{ app: FastifyInstance; store: TelemetryStore; observability: TelemetryObservability }> => {
+  validateMetricsToken(options.metricsToken);
+  const observability = new TelemetryObservability({
+    writer: options.logger ? options.loggerStream ?? createWritableObservationWriter(process.stdout) : undefined,
+    clock: options.observationClock,
+  });
   const now = options.now ?? Date.now;
   const store = new TelemetryStore(options.dbPath, {
     now,
     liveSessionTtlMs: options.liveSessionTtlMs,
   });
   const app = Fastify({
-    logger: options.logger ? {
-      stream: options.loggerStream,
-      // Live grants remain in the legacy URL contract, so log only its path.
-      serializers: { req: (request) => ({ method: request.method, url: request.url?.split('?')[0] }) },
-      redact: ['req.headers.authorization', 'req.headers.cookie'],
-    } : false,
+    ...(options.logger ? { loggerInstance: observability.frameworkLogger() } : { logger: false }),
+    disableRequestLogging: true,
+    requestIdHeader: false,
+    genReqId: () => randomUUID(),
   });
+  const started = new WeakMap<FastifyRequest, number>();
+  app.addHook('onRequest', async (request, reply) => {
+    started.set(request, observability.timestamp());
+    reply.header('x-request-id', request.id);
+  });
+  app.addHook('onResponse', async (request, reply) => {
+    observability.httpCompleted(request.id, request.method, request.routeOptions.url, reply.statusCode,
+      started.get(request) ?? observability.timestamp());
+  });
+  observability.storeReadiness(store.isReady());
+
+  if (options.metricsToken) {
+    app.get('/internal/metrics', async (request, reply) => {
+      reply.header('cache-control', 'no-store');
+      if (!metricsAuthorized(request.headers.authorization, options.metricsToken!)) {
+        return reply.code(401).send({ code: 'unauthorized', message: 'Metrics authorization required.' });
+      }
+      try {
+        observability.storeReadiness(store.isReady());
+        return reply.type('text/plain; version=0.0.4; charset=utf-8').send(observability.prometheus());
+      } catch {
+        return reply.code(503).send({ code: 'metrics_unavailable', message: 'Metrics are unavailable.' });
+      }
+    });
+  }
 
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof TelemetryStoreError) {
@@ -203,10 +235,20 @@ export const buildServer = async (
   });
 
   app.get('/v1/trips/:tripId/live', { websocket: true }, (socket, request) => {
+    const observeClose = observability.socketOpened(request.id);
+    socket.on('close', (code) => observeClose(code));
     const { tripId } = request.params as { tripId: string };
     const { sessionToken } = request.query as { sessionToken?: unknown };
-    const liveSession =
-      typeof sessionToken !== 'string' ? null : store.validateLiveSession(tripId, sessionToken);
+    const validateSession = () => {
+      try {
+        return typeof sessionToken !== 'string' ? null : store.validateLiveSession(tripId, sessionToken);
+      } catch {
+        observability.storeValidationFailed();
+        observability.storeReadiness(store.isReady());
+        return null;
+      }
+    };
+    const liveSession = validateSession();
 
     const closeUnauthorized = () => {
       if (socket.readyState !== socket.OPEN) return;
@@ -224,8 +266,7 @@ export const buildServer = async (
       return;
     }
 
-    const authorized = () => typeof sessionToken === 'string' &&
-      store.validateLiveSession(tripId, sessionToken) != null;
+    const authorized = () => validateSession() != null;
     const unsubscribe = store.onLiveSessionsRevoked((event) => {
       if (event.tripId === tripId && (!event.sessionId || event.sessionId === liveSession.id)) {
         // A WS completion must send its durable acknowledgement before closing.
@@ -251,23 +292,29 @@ export const buildServer = async (
 
     socket.on('message', (raw) => {
       if (!authorized()) {
+        observability.socketMessage('unauthorized', 'rejected');
         closeUnauthorized();
         return;
       }
+      let kind: 'ping' | 'hello' | 'sample_batch' | 'trip_complete' | 'invalid' = 'invalid';
       try {
         const json = JSON.parse(raw.toString());
         const parsed = wsMessageSchema.parse(json);
+        kind = parsed.type;
 
         if (parsed.type === 'ping') {
+          observability.socketMessage(kind, 'accepted');
           socket.send(JSON.stringify({ type: 'pong' }));
           return;
         }
 
         if (parsed.type === 'hello') {
           if (parsed.tripId !== tripId) {
+            observability.socketMessage(kind, 'rejected');
             closeUnauthorized();
             return;
           }
+          observability.socketMessage(kind, 'accepted');
           socket.send(
             JSON.stringify({
               type: 'ack',
@@ -283,6 +330,7 @@ export const buildServer = async (
             batchId: parsed.batchId,
             samples: parsed.samples,
           });
+          observability.socketMessage(kind, 'accepted');
           socket.send(
             JSON.stringify({
               type: 'ack',
@@ -294,6 +342,7 @@ export const buildServer = async (
         }
 
         store.completeTrip(tripId, parsed.payload);
+        observability.socketMessage(kind, 'accepted');
         socket.send(
           JSON.stringify({
             type: 'ack',
@@ -302,6 +351,7 @@ export const buildServer = async (
           })
         );
       } catch (error) {
+        observability.socketMessage(kind, kind === 'invalid' ? 'rejected' : 'error');
         socket.send(
           JSON.stringify({
             type: 'error',
@@ -318,7 +368,8 @@ export const buildServer = async (
 
   app.addHook('onClose', async () => {
     store.close();
+    observability.storeReadiness(store.isReady());
   });
 
-  return { app, store };
+  return { app, store, observability };
 };

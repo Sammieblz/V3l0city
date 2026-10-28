@@ -16,7 +16,7 @@ Digital speedometer built with Expo and React Native.
 1. Install dependencies
 
    ```bash
-   npm install
+   npm ci
    ```
 
 2. Run a development build
@@ -37,6 +37,11 @@ Expo Go is not the target runtime for this project because the native
 `V3l0citySpeedEngine` Expo Module must be compiled into the app. Use iOS and
 Android development builds for real speed-engine testing.
 
+Use the Node version recorded in `.node-version`. The default mobile mode is
+Local: sign-in and a reachable backend are unnecessary for recording, history
+and export. See [testing and operations](docs/developer/testing-and-operations.md)
+for deterministic checks, separate web installation and remaining device gates.
+
 Expo Router screens live in `app/`. Shared application code lives in `src/` so Expo Router does not treat helpers, hooks, storage, and API clients as routes.
 
 ## Public Web Project
@@ -47,6 +52,7 @@ it from its own project directory:
 
 ```bash
 cd web
+npm ci
 npm run dev
 ```
 
@@ -63,7 +69,7 @@ Prerequisites:
 
 - macOS with Xcode installed.
 - CocoaPods installed (`pod --version` should print a version).
-- Node dependencies installed with `npm install`.
+- Node dependencies installed with `npm ci`.
 
 Build for the iOS simulator:
 
@@ -203,7 +209,8 @@ For simulator/emulator testing, use one of the built-in drive paths:
 - Cloud and social:
   - `src/cloud/` contains provider-neutral auth, sync, and social interfaces plus the Supabase adapter.
   - `supabase/` contains migrations and authenticated Edge Functions for optional accounts, cloud sync, friends, nearby discovery, and aggregate leaderboards.
-  - Set `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` to enable cloud features. If either is missing, the app remains local/offline first.
+  - Local is the default. Legacy auth/social requires explicit `EXPO_PUBLIC_V3L0CITY_CLOUD_PROVIDER=legacy-supabase` plus `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
+  - Personal cloud backup/restore remains denied until persisted recording ownership and adoption consent are implemented. Signing in does not claim existing recordings. Existing accounts/cloud data are retained; no provider retirement is implied.
 
 ## Sensors and limitations
 
@@ -248,9 +255,10 @@ If either mobile env var is missing, telemetry stays disabled. Local speed
 calculation, trip recording, export, and trip history still work. Production
 deployments must use HTTPS/WSS.
 
-Optional Supabase cloud/social features use:
+The retained legacy mobile auth/social adapter uses an explicit opt-in:
 
 ```bash
+EXPO_PUBLIC_V3L0CITY_CLOUD_PROVIDER=legacy-supabase \
 EXPO_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co \
 EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_... \
 npm run ios
@@ -259,12 +267,16 @@ npm run ios
 Use a publishable key only. Never put a Supabase secret or service-role key in
 the app bundle.
 
+This opt-in does not enable personal backup/restore in the transitional build;
+the persisted ownership/adoption gate remains. The independent web project still
+has its legacy adapter; it has not acquired owned v2 feature parity.
+
 ## Testing
 
 - Unit tests live under `__tests__/` and are run with:
 
   ```bash
-  npm test
+  npm run test:ci
   ```
 
 - C++ speed-engine tests can be run with:
@@ -276,9 +288,19 @@ the app bundle.
 - Server tests can be run with:
 
   ```bash
-  npm run server:test
+  npm run server:test:ci
   ```
 
 - Tests cover speed math, motion math, the Kalman adapter, native hook integration, telemetry client/socket behavior, export formatting, C++ core diagnostics, and server API/WebSocket flows.
+
+The server CI command requires an isolated `TEST_DATABASE_URL`; it must not pass
+by skipping real PostgreSQL checks. Run `npm run typecheck`, `npm run lint`,
+`npm run shared:test`, `npm run contracts:check` and `npm run docs:check` alongside
+the test suites. `npm test` remains the interactive watch command.
+
+From `web/`, run `npm ci`, `npm run lint`, `npm run typecheck`, `npm test`,
+`npm run build:ci`, `npx playwright install chromium`, then `npm run test:e2e`.
+The E2E command serves the production build on loopback with synthetic public
+configuration; it does not exercise hosted auth or a real connected journey.
 
 Full native validation commands are listed in the speed-engine doc.

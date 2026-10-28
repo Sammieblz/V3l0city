@@ -316,10 +316,12 @@ describe('Telemetry ownership and live authorization regressions', () => {
     const live = await connect(trip.sessionToken);
     live.socket.send(JSON.stringify({ type: 'ping' }));
     await live.message('pong');
-    const combined = logs.join('');
-    assert.ok(combined.includes('/v1/trips/security-trip/live'));
-    for (const secret of [owner.deviceToken, trip.sessionToken, 'secret-cookie-value', 'secret-query-value', 'secret-parser-payload', 'sessionToken=']) {
-      assert.equal(combined.includes(secret), false, 'Application logs must not include credentials or query values.');
+    // Logging is best effort and asynchronous; allow its bounded queue to drain.
+    for (let turn = 0; turn < 20; turn++) await new Promise<void>((resolve) => setImmediate(resolve));
+    const drained = logs.join('');
+    assert.ok(drained.includes('/v1/trips/:tripId/live'));
+    for (const secret of [owner.deviceToken, trip.sessionToken, 'security-trip', 'secret-cookie-value', 'secret-query-value', 'secret-parser-payload', 'sessionToken=']) {
+      assert.equal(drained.includes(secret), false, 'Application logs must not include credentials, path identifiers or query values.');
     }
   });
 });

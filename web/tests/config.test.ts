@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const keys = [
   "VERCEL_ENV",
+  "NEXT_PUBLIC_SITE_URL",
   "NEXT_PUBLIC_SUPABASE_URL",
   "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
 ] as const;
@@ -33,6 +34,7 @@ describe("public configuration", () => {
 
   it("fails the production build when required public values are absent", async () => {
     process.env.VERCEL_ENV = "production";
+    delete process.env.NEXT_PUBLIC_SITE_URL;
     delete process.env.NEXT_PUBLIC_SUPABASE_URL;
     delete process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 

@@ -9,6 +9,10 @@ by subsystem rather than by chronology.
   boundaries, capability inventory, ADRs and unresolved release decisions.
 - [Foundation Implementation Record](foundation-implementation-record.md): chronological
   ticket progress, executed checks and remaining release gates.
+- [Quality Implementation Record](quality-implementation-record.md): the next
+  chronological observability, test, documentation and PR CI work.
+- [Telemetry Observability](observability.md): safe correlation, bounded metrics,
+  authenticated export and failure isolation.
 - [System Architecture](system-architecture.md): product constraints, runtime
   boundaries, repository layout, data flows, and the local-first rule.
 - [Mobile Frontend](mobile-frontend.md): Expo app boot, first-install
