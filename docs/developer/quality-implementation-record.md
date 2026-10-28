@@ -66,6 +66,16 @@ trip repository is 30.76%. Its ACK regressions do not qualify all lifecycle,
 recovery or migration paths. #36/#37 remain the next Local persistence priorities.
 Hosted workflow results must be read from an actual run before claiming CI passed.
 
+The first hosted run,
+[40786477638](https://github.com/Sammieblz/V3l0city/actions/runs/40786477638),
+passed server/security/real PostgreSQL, Linux C++, compiled-server graceful
+SIGTERM, and web production/browser checks. Its mobile job caught an existing
+timezone-dependent history snapshot: the same epoch displayed on December 31 in
+New York and January 1 in UTC. The snapshot now explicitly controls its default
+locale/timezone while delegating to real Date formatting; product behavior and
+snapshot files remain unchanged. Independent UTC and Pacific/Auckland runs pass.
+The following PR run must confirm the complete gate on the corrected head.
+
 Independent isolated-process replays first reproduced both the broken-pipe crash
 and uncaught SQLite socket-validation crash, then confirmed their fixes. A saved
 trip survives the broken log pipe; message and idle sockets close with code 1008;

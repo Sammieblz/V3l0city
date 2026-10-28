@@ -5,6 +5,25 @@ import TripHistory from '../src/components/TripHistory';
 import type { Trip } from '../src/domain/trip';
 
 describe('TripHistory', () => {
+  const formatDate = Date.prototype.toLocaleDateString;
+  const formatTime = Date.prototype.toLocaleTimeString;
+  const defaultLocale = (locales: Parameters<typeof formatDate>[0]) =>
+    locales === undefined || (Array.isArray(locales) && locales.length === 0) ? 'en-US' : locales;
+
+  beforeEach(() => {
+    // The UI intentionally uses the device's locale/timezone. Fix those defaults
+    // for this snapshot while retaining real formatting and stable ISO fixtures.
+    // Explicit component formatting options still override the test defaults.
+    jest.spyOn(Date.prototype, 'toLocaleDateString').mockImplementation(function (this: Date, locales, options) {
+      return formatDate.call(this, defaultLocale(locales), { timeZone: 'America/New_York', ...options });
+    });
+    jest.spyOn(Date.prototype, 'toLocaleTimeString').mockImplementation(function (this: Date, locales, options) {
+      return formatTime.call(this, defaultLocale(locales), { timeZone: 'America/New_York', ...options });
+    });
+  });
+
+  afterEach(() => { jest.restoreAllMocks(); });
+
   it('renders empty state and a list of trips', async () => {
     let empty: ReactTestRenderer | undefined;
     await act(async () => {
