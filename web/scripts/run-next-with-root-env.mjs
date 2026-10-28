@@ -13,8 +13,9 @@ const repositoryRoot = resolve(webDirectory, "..");
 // Let the standalone web project reuse the native app's local public Supabase
 // configuration. This happens before Next/Turbopack starts, which is required
 // for NEXT_PUBLIC_* values to be embedded in browser code. Existing web or
-// deployment values always take precedence, and no private credential is read.
-loadEnvConfig(repositoryRoot);
+// deployment values always take precedence. Only the listed public values are
+// used as browser fallbacks; the CI public smoke skips root env loading entirely.
+if (process.env.V3L0CITY_WEB_PUBLIC_CHECK !== "1") loadEnvConfig(repositoryRoot);
 
 function applyExpoPublicFallback(nextName, expoName) {
   if (process.env[nextName]?.trim()) return;

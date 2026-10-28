@@ -10,7 +10,12 @@ const environmentSchema = z.object({
   V3L0CITY_SERVER_DB: z.string().trim().min(1).default('server/data/v3l0city.sqlite'),
   V3L0CITY_PUBLIC_WS_URL: z.url().optional(),
   SHUTDOWN_TIMEOUT_MS: integer(10000, 1, 300000),
+  V3L0CITY_METRICS_ENABLED: z.enum(['true', 'false']).default('false'),
+  V3L0CITY_METRICS_TOKEN: z.string().regex(/^[A-Za-z0-9_-]{32,256}$/).optional(),
 }).superRefine((env, context) => {
+  if (env.V3L0CITY_METRICS_ENABLED === 'true' && !env.V3L0CITY_METRICS_TOKEN) {
+    context.addIssue({ code: 'custom', path: ['V3L0CITY_METRICS_TOKEN'], message: 'Metrics export requires authentication.' });
+  }
   const deployed = env.V3L0CITY_ENV === 'staging' || env.V3L0CITY_ENV === 'production';
   if (deployed && env.V3L0CITY_SERVER_DB === ':memory:') {
     context.addIssue({ code: 'custom', path: ['V3L0CITY_SERVER_DB'], message: 'A persistent database path is required.' });
@@ -36,6 +41,7 @@ export type RuntimeConfig = {
   dbPath: string;
   publicWsUrl?: string;
   shutdownTimeoutMs: number;
+  metricsToken?: string;
 };
 
 export class ConfigurationError extends Error {
@@ -53,6 +59,8 @@ export const loadRuntimeConfig = (env: Readonly<Record<string, string | undefine
     V3L0CITY_SERVER_DB: env.V3L0CITY_SERVER_DB,
     V3L0CITY_PUBLIC_WS_URL: env.V3L0CITY_PUBLIC_WS_URL,
     SHUTDOWN_TIMEOUT_MS: env.SHUTDOWN_TIMEOUT_MS,
+    V3L0CITY_METRICS_ENABLED: env.V3L0CITY_METRICS_ENABLED,
+    V3L0CITY_METRICS_TOKEN: env.V3L0CITY_METRICS_TOKEN,
   });
   if (!parsed.success) {
     // Field names are sufficient to fix startup; never echo secret-bearing input.
@@ -65,5 +73,6 @@ export const loadRuntimeConfig = (env: Readonly<Record<string, string | undefine
     dbPath: parsed.data.V3L0CITY_SERVER_DB,
     publicWsUrl: parsed.data.V3L0CITY_PUBLIC_WS_URL?.replace(/\/$/, ''),
     shutdownTimeoutMs: parsed.data.SHUTDOWN_TIMEOUT_MS,
+    metricsToken: parsed.data.V3L0CITY_METRICS_ENABLED === 'true' ? parsed.data.V3L0CITY_METRICS_TOKEN : undefined,
   };
 };

@@ -6,7 +6,9 @@ import type { NextConfig } from "next";
 // This is intentionally a one-way, local-development compatibility bridge: only
 // the Supabase URL and publishable key are exposed to the browser, never a
 // service-role credential. Vercel continues to use its own NEXT_PUBLIC_* envs.
-loadEnvConfig(resolve(process.cwd(), ".."));
+if (process.env.V3L0CITY_WEB_PUBLIC_CHECK !== "1") {
+  loadEnvConfig(resolve(process.cwd(), ".."));
+}
 
 function applyExpoPublicFallback(nextName: string, expoName: string) {
   if (process.env[nextName]?.trim()) return;

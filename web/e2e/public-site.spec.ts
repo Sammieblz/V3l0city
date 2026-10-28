@@ -1,5 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
 
+// Public smoke may never contact hosted accounts, CAPTCHA or analytics. This
+// also keeps retained failure traces limited to synthetic local page traffic.
+test.beforeEach(async ({ context, baseURL }) => {
+  const origin = new URL(baseURL!).origin;
+  await context.route("**/*", (route) => new URL(route.request().url()).origin === origin
+    ? route.continue() : route.abort("blockedbyclient"));
+});
+
 async function openAppearanceChooser(page: Page) {
   const chooser = page.getByRole("button", { name: "Choose color theme" });
   if (!await chooser.isVisible()) {
@@ -9,7 +17,8 @@ async function openAppearanceChooser(page: Page) {
 }
 
 test("landing page renders its primary message and safety boundary", async ({ page }) => {
-  await page.goto("/");
+  const response = await page.goto("/");
+  expect(response?.headers()["content-security-policy"]).not.toContain("'unsafe-eval'");
   await expect(page.getByRole("heading", { name: /keep the road/i })).toBeVisible();
   await expect(page.getByText(/foreground-only/i).first()).toBeVisible();
   await expect(page.getByRole("link", { name: /explore the live demo/i })).toBeVisible();
@@ -43,10 +52,13 @@ test("mobile navigation is keyboard-operable and preserves clear page semantics"
   await expect(menuButton).toBeFocused();
 });
 
-test("public pages expose distinct metadata and structured FAQ content", async ({ page }) => {
+test("public pages expose distinct metadata and structured FAQ content", async ({ page, baseURL }) => {
   await page.goto("/");
   await expect(page).toHaveTitle(/Drive data, in focus/i);
-  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", /localhost:3000$/);
+  await expect.poll(async () => {
+    const canonical = await page.locator('link[rel="canonical"]').getAttribute("href");
+    return canonical ? new URL(canonical).href : null;
+  }).toBe(new URL("/", baseURL).href);
   await expect.poll(() => page.locator('script[type="application/ld+json"]').evaluate((node) => node.textContent)).toContain("FAQPage");
 
   await page.goto("/how-it-works");
@@ -97,4 +109,13 @@ test("demo does not request location and clearly labels its limitations", async 
   await expect(page.getByText(/no account. no location/i)).toBeVisible();
   await expect(page.getByRole("button", { name: /start simulation/i })).toBeVisible();
   await expect(page.getByText(/open, visible, and unlocked/i).first()).toBeVisible();
+});
+
+test("public smoke does not enable hosted authentication", async ({ page }) => {
+  await page.goto("/auth/sign-in");
+  await page.getByLabel("Email address").fill("synthetic@example.test");
+  await page.getByLabel("Password", { exact: true }).fill("synthetic-only-password");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "Cloud authentication is not configured" })).toBeVisible();
+  await expect(page).toHaveURL(/\/auth\/sign-in$/);
 });

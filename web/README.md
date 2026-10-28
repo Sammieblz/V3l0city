@@ -1,12 +1,25 @@
 # V3l0city Web
 
-The web release is an independent Next.js App Router project. It reuses the V3l0city Supabase account, trip-sync, friend, and leaderboard contracts, while keeping browser trip storage in a distinct `v3l0city-web` IndexedDB database. It does not import Expo or native runtime modules.
+The web project is an independent Next.js App Router application. Public pages
+and the simulator work without a provider. Its retained legacy account/social
+adapter uses Supabase contracts and a distinct `v3l0city-web` IndexedDB database;
+that adapter has not yet acquired owned v2 backend parity. It does not import
+Expo or native runtime modules. Owned v2 invite, account, support and legal
+surfaces remain tracked separately in #81.
 
 ## Local development
 
-1. The `npm run dev`, `npm run build`, and `npm run start` commands automatically reuse the repository-root `.env` values named `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Alternatively, copy `.env.example` to `web/.env.local` and set the `NEXT_PUBLIC_SUPABASE_*` values to override them. Do not add a service-role key. If you invoke `next` directly instead of an npm script, set the `NEXT_PUBLIC_SUPABASE_*` values yourself.
-2. Apply the repository Supabase migrations and deploy `delete-account` and `report-profile` alongside the existing Edge Functions.
-3. Run `npm run dev` from this directory.
+1. Use the root `.node-version`, then run `npm ci` in this directory; its lockfile
+   and dependencies are separate from the native app.
+2. Run `npm run dev` for public pages and the synthetic simulator. Hosted
+   accounts are optional. The ordinary `dev`, `build`, and `start` commands
+   retain a compatibility bridge from repository-root public Expo Supabase
+   configuration; explicit `NEXT_PUBLIC_SUPABASE_*` values override it. Never
+   put a service-role/secret key in this project.
+3. Test real legacy account flows only against an authorized isolated provider
+   environment. Do not apply migrations or alter retained hosted data as part
+   of a public-site check. See the historical compatibility checklist below
+   for the old provider requirements.
 
 Useful checks:
 
@@ -14,11 +27,29 @@ Useful checks:
 npm run typecheck
 npm run lint
 npm test
-npm run build
+npm run build:ci
+npx playwright install chromium
 npm run test:e2e
 ```
 
-## Production launch checklist
+`build:ci` uses synthetic public metadata and no hosted auth/CAPTCHA credentials.
+Run it immediately before E2E. The test command requires `.next/BUILD_ID` and
+serves that production artifact with `next start` on `127.0.0.1:3100`; it never
+reuses a developer server. Ordinary `npm run build`/`npm run start` keep existing
+deployment behavior. Linux CI installs Chromium dependencies with
+`npx playwright install --with-deps chromium`.
+
+The desktop/mobile-emulation tests block cross-origin traffic and exercise
+public navigation, metadata, theme, demo boundaries and unavailable auth. Their
+retained HTML/JUnit reports, failure traces and screenshots contain synthetic
+public journeys only. They do not prove hosted auth, owned connected features,
+physical mobile behavior or production readiness.
+
+## Historical legacy web launch checklist
+
+This records the retained provider-specific web deployment. It is not an owned
+v2 hosting decision or instruction to migrate live accounts; final retirement
+waits for verified data and feature parity.
 
 - Create a Vercel project with `web/` as its root directory. Set every variable in `.env.example`, including the legal entity identity, public contact addresses, legal effective date, and terms version. Vercel production builds fail if those required legal values are absent.
 - Configure `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` directly in Vercel; the repository-root Expo `.env` fallback is local-development only. Never use `SUPABASE_SERVICE_ROLE_KEY` in this project. The service role remains confined to Supabase Edge Function infrastructure.

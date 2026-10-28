@@ -81,3 +81,11 @@ References: [backend foundations](backend-foundations.md),
 [decisions](release-decisions.md), [PostgreSQL](postgresql.md),
 [contracts](contracts.md), [domain seams](owned-domain-and-migration.md),
 [legacy preservation rehearsal](legacy-migration-rehearsal.md).
+
+## Subsequent merge and ticket follow-through
+
+PR #109 merged into `dev` on October 13, 2026 as
+`386241cd890efb3baaccbd0b66a6d689cf69d74f`. The evidence above is the original
+October 6 record, not an assertion that the code is still unmerged. The October
+28 [quality implementation record](quality-implementation-record.md) tracks the
+next chronological queue, automated checks and remaining completion gates.
