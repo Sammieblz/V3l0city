@@ -4,7 +4,7 @@ import {
   parseExportPayload,
   previewImportPayload,
 } from '../src/database/exportFormat';
-import type { Trip, TripSpeedSample } from '../src/domain/trip';
+import type { RecordingGap, Trip, TripSpeedSample } from '../src/domain/trip';
 
 const trip: Trip = {
   id: 'trip-1',
@@ -44,6 +44,28 @@ const sample: TripSpeedSample = {
 };
 
 describe('exportService trip speed samples', () => {
+  const gap: RecordingGap = {
+    id: 'gap-1', tripId: 'trip-1', reason: 'restart',
+    startedAt: '2026-05-19T12:00:01.000Z', endedAt: '2026-05-19T12:01:00.000Z',
+  };
+
+  it('round-trips gaps as separate data without inventing speed samples', () => {
+    const trips = [{ ...trip, recordingGaps: [gap], speedSamples: [sample] }];
+    expect(parseExportPayload(JSON.parse(JSON.stringify(buildExportPayload(null, trips)))).trips[0])
+      .toMatchObject({ recordingGaps: [gap], speedSamples: [sample] });
+    const csv = buildTripsCsv(trips, [{ tripId: trip.id, samples: [sample] }]);
+    expect(csv).toContain('Trip ID,Gap ID,Reason,Started At,Ended At\ntrip-1,gap-1,restart,2026-05-19T12:00:01.000Z,2026-05-19T12:01:00.000Z');
+  });
+
+  it.each([
+    { tripId: 'other-trip' }, { reason: 'invented' }, { startedAt: 'invalid' },
+    { endedAt: '2026-05-19T11:00:00.000Z' },
+    { endedAt: null }, { endedAt: '2026-05-19T12:03:00.000Z' },
+    { startedAt: '2026-05-19T11:59:00.000Z' },
+  ])('rejects invalid gaps rather than silently discarding them (%j)', (invalid) => {
+    expect(() => parseExportPayload({ trips: [{ ...trip, recordingGaps: [{ ...gap, ...invalid }] }] }))
+      .toThrow('invalid recording gaps');
+  });
   it('includes per-trip speed samples in JSON payloads', () => {
     const payload = buildExportPayload(
       {
@@ -106,5 +128,10 @@ describe('exportService trip speed samples', () => {
     expect(() => parseExportPayload({ hello: 'world' })).toThrow(
       'Choose a V3l0city JSON export file'
     );
+  });
+
+  it('rejects draft imports before they can create a hidden unfinished recording', () => {
+    expect(() => parseExportPayload({ trips: [{ ...trip, recordStatus: 'draft', speedSamples: [] }] }))
+      .toThrow('Finish and save recordings before importing this file.');
   });
 });

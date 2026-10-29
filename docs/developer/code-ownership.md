@@ -12,10 +12,13 @@ it. This is not ownership by person. It is ownership by subsystem.
 | Speed hook state | `src/hooks/useVelocitySensors.ts` | `__tests__/useVelocitySensors.native.test.tsx` |
 | JS speed fallback | `src/hooks/useKalmanSpeedFilter.ts`, `src/utils/*Math.ts`, `src/utils/sensorGuards.ts` | math/hook Jest tests |
 | Native speed algorithm | `modules/v3l0city-speed-engine/common/cpp/*` | C++ tests, native builds |
+| Native glance projections | `LiveDriveProjection.swift`, `LiveDriveProjection.kt`, native managers | Actual Swift/Kotlin helper execution, native builds and physical background/lock/restart checks |
 | iOS sensor collection | `modules/v3l0city-speed-engine/ios/*` | iOS build, iOS simulator route |
 | Android sensor collection | `modules/v3l0city-speed-engine/android/*` | Android build, Android route/diagnosis |
 | Preferences | `src/database/preferencesRepository.ts`, `speedometer.tsx` | TypeScript, manual settings check |
 | Trip persistence | `src/database/database.ts`, `src/database/tripRepository.ts` | Jest, export tests |
+| Recording lifecycle | `src/recording/*`, `src/database/recordingRepository.ts` | Real SQLite rollback/reopen/failure tests, controller races and native device matrix |
+| Local migrations and connected replicas | `src/database/sqliteMigrations.ts`, `legacyLocalImport.ts`, `connectedCache.ts` | Historical/current SQLite fixtures, account generations, invalidation and import receipts |
 | Export | `src/database/exportService.ts`, `src/database/exportFormat.ts` | export tests |
 | Mobile telemetry | `src/api/*` | telemetry Jest tests |
 | Cloud sync/social | `src/cloud/*`, `supabase/**`, cloud screens | TypeScript, Jest, Supabase migration/advisor checks |
@@ -116,8 +119,9 @@ Then update:
 Rules:
 
 - Add migrations for existing installs.
-- Preserve old data when possible.
-- Do not throw on best-effort legacy migration failures.
+- Preserve existing records, upload markers and source payloads on failure.
+- Propagate schema/read failures to recoverable UI; never present them as empty history.
+- Remove legacy source keys only after a validated transaction and matching receipt.
 - Keep export data portable.
 
 ### Change Telemetry Payload Shape

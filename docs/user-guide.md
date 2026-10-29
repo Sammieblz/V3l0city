@@ -17,8 +17,7 @@ The app can:
 - Save trips to history.
 - Export trip data as JSON or CSV.
 - Auto-start and pause trips when movement is detected.
-- Save active trips when the app is closed or sent to the background, if you
-  enable that setting.
+- Recover unfinished trips from their last confirmed local checkpoint.
 
 V3l0city is designed for foreground use. Keep the app open while using it as a
 speedometer.
@@ -97,7 +96,8 @@ To record a trip manually:
 After saving, the trip appears in History.
 
 If the trip is paused through auto-start behavior, the button changes to
-**Save & end**.
+**Save & end**. Use **Resume** to continue a paused or recovered trip when
+precise location is available.
 
 ## Resetting
 
@@ -133,7 +133,8 @@ History shows saved trips with:
 - Maximum speed
 - Start and end time
 
-Tap **Clear All** to remove all saved trips from the device.
+Tap **Clear All** to remove completed trips from History. An unfinished recording
+is preserved so you can recover or save it.
 
 Clearing history is local to the app data stored on your device.
 
@@ -231,9 +232,20 @@ Start Trip every time.
 
 ### Trip Recovery
 
-V3l0city creates a local draft when a trip starts and keeps samples on the phone
-as the trip runs. If the app closes unexpectedly, it tries to recover the
-unfinished trip the next time you open it.
+V3l0city checkpoints recordings on the phone without an account or network.
+After an unexpected close, it opens unfinished recordings paused, with their
+last confirmed totals. Use **Resume** to continue or **Save & end** to keep the
+recording as it stands. If there are several unfinished recordings, saving one
+reveals the next.
+
+Missing sampling intervals are marked as gaps in the recording and exports.
+Background suspension or closing the app may leave such a gap; live widgets do
+not guarantee that every speed reading was saved.
+
+If storage cannot save recent changes, keep the app open, check available storage
+and use the retry action. A storage error does not erase existing history. If
+saved trips cannot be opened at startup, the app offers retry instead of showing
+an empty History screen.
 
 Use **Stop & Save** when you are done driving. During an active trip, live
 widgets and Live Activities may keep updating after the app is backgrounded if
@@ -473,8 +485,9 @@ Distance history is saved only while a trip is active and not paused.
 ### Trip did not save
 
 Use **Stop & Save** before closing the app. If the app closes unexpectedly,
-V3l0city keeps a local draft and tries to recover it the next time you open the
-app.
+V3l0city recovers the last confirmed local checkpoint paused on the next launch.
+Sampling gaps may remain after suspension or termination. Retry any visible
+storage error before closing the app.
 
 ### Heading looks rotated
 

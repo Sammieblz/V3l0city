@@ -167,7 +167,9 @@ describe('cloud acknowledgement compare-and-set on actual SQLite', () => {
     mockConnection.exec(`CREATE TRIGGER reject_second_ack BEFORE UPDATE ON sync_outbox
       WHEN NEW.id = 'upload-b' BEGIN SELECT RAISE(ABORT, 'acknowledgement-write-failed'); END;`);
     await expect(acknowledgeCloudSync([snapshot(), snapshot('trip-b')], await getPendingSyncOperations(null)))
-      .rejects.toThrow('acknowledgement-write-failed');
+      // Native SQLite errors can originate in another Jest realm. Check the
+      // exact engine error and message rather than instanceof-based toThrow.
+      .rejects.toMatchObject({ code: 'SQLITE_CONSTRAINT_TRIGGER', message: 'acknowledgement-write-failed' });
     expect(tripState().sync_status).toBe('pending');
     expect(tripState('trip-b').sync_status).toBe('pending');
     expect(tripState().cloud_synced_at).toBeNull();

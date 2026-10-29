@@ -4,6 +4,7 @@ import { getCloudConfig } from './config';
 import { defaultCloudProviderFactory, type CloudProviderFactory } from './providers';
 import { logAppWarning } from '../utils/logging';
 import { getUserFacingErrorMessage } from '../utils/userFacingErrors';
+import { LocalStorageError } from '../database/storageErrors';
 
 export type RecordingOwnershipPort = {
   canUpload(recordingId: string, userId: string): Promise<boolean>;
@@ -26,16 +27,31 @@ export const createCloudService = (options: {
   isConfigured: () => boolean;
   store?: TripStore;
   ownership?: RecordingOwnershipPort;
+  invalidateConnectedCache?: () => void | Promise<void>;
+  reconcileConnectedCache?: (userId: string | null, stillCurrent: () => boolean) => void | Promise<void>;
 }) => {
   const store = options.store ?? tripRepository;
   const ownership = options.ownership ?? noAdoption;
   let accountEpoch = 0;
   let authTransitions = 0;
   let syncInFlight = false;
-  const withAuthTransition = async <T>(action: () => Promise<T>): Promise<T> => {
+  let observedUserId: string | null | undefined;
+  let sessionObservationGeneration = 0;
+  const withAuthTransition = async <T>(action: () => Promise<T>, signOut = false): Promise<T> => {
     authTransitions++;
     accountEpoch++;
-    try { return await action(); } finally {
+    try {
+      let cleanupFailed = false;
+      try { await options.invalidateConnectedCache?.(); } catch {
+        cleanupFailed = true;
+        if (!signOut) throw new LocalStorageError('storage_unavailable');
+      }
+      // Sign-out must still clear credentials if cache IO failed. Other account
+      // changes fail closed before dispatching a new account's authentication.
+      const result = await action();
+      if (cleanupFailed) throw new LocalStorageError('storage_unavailable');
+      return result;
+    } finally {
       // Completion/failure is another boundary: a sync must not capture the old
       // account under the transition's new epoch while login is still pending.
       accountEpoch++;
@@ -50,11 +66,28 @@ export const createCloudService = (options: {
   };
   const auth: AuthProvider = {
     isConfigured: options.isConfigured,
-    getSession: async () => options.isConfigured() ? (await providers()).auth.getSession() : null,
+    getSession: async () => {
+      if (authTransitions > 0) return null;
+      const observation = ++sessionObservationGeneration;
+      const startedEpoch = accountEpoch;
+      const received = options.isConfigured() ? await (await providers()).auth.getSession() : null;
+      if (authTransitions > 0 || startedEpoch !== accountEpoch
+        || observation !== sessionObservationGeneration) return null;
+      const session = received ? Object.freeze({ ...received }) : null;
+      const userId = session?.userId ?? null;
+      if (observedUserId !== undefined && observedUserId !== userId) accountEpoch++;
+      observedUserId = userId;
+      const observationEpoch = accountEpoch;
+      const stillCurrent = () => authTransitions === 0 && accountEpoch === observationEpoch
+        && observation === sessionObservationGeneration;
+      try { await options.reconcileConnectedCache?.(userId, stillCurrent); } catch { throw new LocalStorageError('storage_unavailable'); }
+      if (!stillCurrent()) return null;
+      return session;
+    },
     getProfile: async () => options.isConfigured() ? (await providers()).auth.getProfile() : null,
     signUpWithEmail: (input) => withAuthTransition(async () => (await providers()).auth.signUpWithEmail(input)),
     signInWithEmail: (email, password) => withAuthTransition(async () => (await providers()).auth.signInWithEmail(email, password)),
-    signOut: () => withAuthTransition(async () => { if (options.isConfigured()) await (await providers()).auth.signOut(); }),
+    signOut: () => withAuthTransition(async () => { if (options.isConfigured()) await (await providers()).auth.signOut(); }, true),
     upsertProfile: async (input) => (await providers()).auth.upsertProfile(input),
   };
   const social: SocialProvider = {
@@ -162,6 +195,14 @@ export const createCloudService = (options: {
 
 const service = createCloudService({
   factory: defaultCloudProviderFactory, isConfigured: () => getCloudConfig().enabled,
+  invalidateConnectedCache: async () => {
+    const { invalidateActiveConnectedCache } = await import('../database/connectedCacheLifecycle');
+    invalidateActiveConnectedCache();
+  },
+  reconcileConnectedCache: async (userId, stillCurrent) => {
+    const { reconcileConnectedCacheSession } = await import('../database/connectedCacheLifecycle');
+    if (stillCurrent()) reconcileConnectedCacheSession(userId);
+  },
 });
 export const isCloudConfigured = () => getCloudConfig().enabled;
 export const cloudAuth = service.auth;

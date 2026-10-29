@@ -37,6 +37,8 @@ jobs:
       - run: npm run lint
       - run: npm run test:tooling
       - run: npm run test:coverage
+      - name: Bundle Android and iOS JavaScript
+        run: npx expo export --platform android --platform ios --max-workers 2 --output-dir "$RUNNER_TEMP/mobile-bundles"
       - run: npm run docs:check
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
@@ -81,8 +83,8 @@ jobs:
       - run: npm run server:smoke
 
   native:
-    name: C++ speed engine
-    runs-on: ubuntu-latest
+    name: C++ and native glance projections
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -96,6 +98,12 @@ jobs:
       - run: npm run test:speed-engine:cpp
         env:
           CXX: c++
+      # Framework-free production projection helpers; full native builds and
+      # physical background/lock/restart checks remain separate gates.
+      - run: swiftc --version
+      - run: kotlinc -version
+      - run: java -version
+      - run: npm run test:glance-projections
 
   web:
     name: Web production and browser tests

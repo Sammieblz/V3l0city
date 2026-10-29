@@ -44,7 +44,7 @@ const TripHistory: React.FC<Props> = ({ trips, onClear }) => {
             const end = new Date(item.endedAt);
             const durationMs = end.getTime() - start.getTime();
             const durationMin = Math.round(durationMs / 60000);
-            const distanceKm = item.totalDistanceMeters / 1000;
+            const distanceDisplay = item.totalDistanceMeters / (item.units === 'km/h' ? 1000 : 1609.344);
             const avgSpeedDisplay =
               item.units === 'km/h'
                 ? item.averageSpeedMps * 3.6
@@ -72,7 +72,7 @@ const TripHistory: React.FC<Props> = ({ trips, onClear }) => {
                   <View style={styles.tripStats}>
                     <View style={styles.tripStat}>
                       <Text style={styles.statValue}>
-                        {distanceKm.toFixed(1)}
+                        {distanceDisplay.toFixed(1)}
                       </Text>
                       <Text style={styles.statLabel}>
                         {item.units === 'km/h' ? 'km' : 'mi'}
@@ -102,6 +102,12 @@ const TripHistory: React.FC<Props> = ({ trips, onClear }) => {
                       minute: '2-digit',
                     })}
                   </Text>
+                  {!!item.recordingGaps?.length && (
+                    <Text style={styles.gapNotice}>
+                      {item.recordingGaps.length === 1 ? '1 sampling gap' : `${item.recordingGaps.length} sampling gaps`}
+                      {' · Details included in export'}
+                    </Text>
+                  )}
                 </Card.Content>
               </Card>
             );
@@ -203,6 +209,13 @@ const createStyles = () => StyleSheet.create({
     fontFamily: fontFamilies.body,
     fontSize: 11,
     textAlign: 'center',
+  },
+  gapNotice: {
+    color: colors.textSecondary,
+    fontFamily: fontFamilies.body,
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 8,
   },
 });
 

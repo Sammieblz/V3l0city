@@ -1,4 +1,5 @@
 import React from 'react';
+import { Text } from 'react-native';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
 import TripHistory from '../src/components/TripHistory';
@@ -23,6 +24,19 @@ describe('TripHistory', () => {
   });
 
   afterEach(() => { jest.restoreAllMocks(); });
+
+  it('shows recovered continuity gaps and converts saved MPH distance to miles', async () => {
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<TripHistory onClear={jest.fn()} trips={[{
+      id: 'recovered', startedAt: new Date(0).toISOString(), endedAt: new Date(60000).toISOString(),
+      totalDistanceMeters: 1609.344, maxSpeedMps: 10, averageSpeedMps: 5, units: 'MPH',
+      recordingGaps: [{ id: 'gap', tripId: 'recovered', reason: 'restart',
+        startedAt: new Date(1000).toISOString(), endedAt: new Date(30000).toISOString() }],
+    }]} />); });
+    expect(renderer.root.findAllByType(Text).some((node) => node.props.children === '1.0')).toBe(true);
+    expect(renderer.root.findAllByType(Text).some((node) => JSON.stringify(node.props.children).includes('1 sampling gap'))).toBe(true);
+    await act(async () => renderer.unmount());
+  });
 
   it('renders empty state and a list of trips', async () => {
     let empty: ReactTestRenderer | undefined;
