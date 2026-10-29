@@ -57,6 +57,23 @@ preserves confirmed totals/units/mount, derives missing legacy summaries from
 samples and records unknown intervals. The user chooses Resume or Save & end.
 Clearing History targets completed records and preserves unfinished drafts.
 
+The durable personal state machine is independent of shared-trip membership:
+
+| Current state and event | Confirmed outcome |
+| --- | --- |
+| Ready, no unfinished draft; Start | Insert one draft in `recording` state |
+| Recording; valid sample | Append sample and checkpoint summary together |
+| Recording; Pause | Persist `paused` and open the appropriate continuity gap |
+| Paused; explicit Resume | Close the gap and persist `recording`; establish a fresh counter anchor |
+| Recording or paused; Save | Persist `completed`, close the gap and enqueue completion once |
+| Restart | Recover every unfinished draft paused; preserve confirmed totals and mark uncertainty |
+| Write failure | Keep the last committed phase/data, hold subsequent writes and retry the original operation |
+| Completion replay | Return canonical saved state without another outbox operation |
+
+An interrupted transaction rolls back. Runtime loading/busy/error flags are
+controller state, not new durable recording phases. Joining/leaving a connected
+trip never implicitly authorizes mutation of this state machine.
+
 `src/recording/controller.ts` serializes phone, car and automatic actions. Local
 commits precede telemetry, notifications and native presentation effects; these
 effects cannot block completion. Failed samples retain their original sequence

@@ -3,6 +3,7 @@
 October 28, 2026. Base: `dev` merge
 `b69491d78198a82442bb8e878016a0464b5b9c6b` (PR #110).
 Branch: `feat/v2-local-recording-recovery`.
+Review: [PR #111](https://github.com/Sammieblz/V3l0city/pull/111), targeting `dev`.
 
 ## Chronological progress
 
@@ -60,11 +61,14 @@ rollback, close/reopen and storage-full failures; they do not mock SQL success.
 Controller/React checks cover serial actions, recovery and readable failure/retry
 states. Export tests prevent sharing incomplete data on read failure.
 
-Native projection execution and full workspace CI results must be read from the
-actual hosted run before claiming success. Windows here has no Swift/Kotlin/Java
-toolchain or mobile SDK. Mandatory CI compiles and executes both helpers on its
-Ubuntu 24.04 native job; missing compilers are failures. JavaScript/Hermes bundle
-exports do not certify the native app, widgets, Live Activities or permissions.
+The [hosted native job](https://github.com/Sammieblz/V3l0city/actions/runs/40801223871/job/123209534513)
+compiled and executed the actual Swift/Kotlin production helpers: 14 scenarios
+passed per language on code commit `36c1981`, alongside the C++ regressions.
+The runner used Swift 6.4.1, Kotlin 2.4.21 and JDK 17.0.21 on Ubuntu 24.04.
+Windows here has no native language/mobile SDK toolchain. PR #111 tracks the
+remaining/full-workspace hosted results; missing compilers fail its native job.
+Both Android and iOS JavaScript/Hermes exports also passed locally. These
+checks do not certify the full native app, widgets, Live Activities or permissions.
 
 The following device checks are still required. Record app commit/build, OS,
 hardware, permissions, network state and actual result for each run:
