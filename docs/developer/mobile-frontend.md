@@ -13,7 +13,7 @@ Responsibilities:
 
 - Set the native system background color to the app background.
 - Initialize SQLite through `initDatabase()`.
-- Render nothing until storage is ready.
+- Show loading or a recoverable storage failure until storage and preferences are ready.
 - Mount `SafeAreaProvider`.
 - Resolve the persisted System/Light/Dark preference against the platform color
   scheme, then mount the matching React Native Paper theme provider.
@@ -38,7 +38,7 @@ It owns:
 - Orientation mode.
 - Current trip active/paused state.
 - Current trip start time and elapsed time.
-- Current in-memory trip samples.
+- Confirmed recording state from the shared controller.
 - Trip history visibility.
 - Settings modal visibility.
 - Drawer menu visibility.
@@ -136,24 +136,20 @@ stats and compass panel.
 
 `startTrip()`:
 
-1. Exits early if a trip is already active.
-2. Creates a trip id from `Date.now()`.
-3. Calls `reset()` on the speed hook.
-4. Clears in-memory sample refs.
-5. Initializes sequence numbering at 1.
-6. Marks the trip active and not paused.
-7. Starts telemetry if configured.
+1. Waits for preferences, history and recording recovery to hydrate.
+2. Uses the shared recording controller's immediate operation guard.
+3. Creates a UUID and commits a draft before marking it active.
+4. Anchors native-counter deltas without assuming an asynchronous reset completed.
+5. Dispatches optional telemetry/native presentation after the local commit.
 
 ### Manual Save
 
 `stopAndSaveTrip()`:
 
-1. Builds a `Trip` aggregate from current state.
-2. Uses `saveTrip(trip, samples)` to persist aggregate and samples.
-3. Calls `tripTelemetryService.completeTrip(trip)` as an optional side effect.
-4. Reloads saved trips from SQLite.
-5. Clears active trip refs.
-6. Schedules an optional local notification.
+1. Serializes behind pending sample writes.
+2. Finalizes the confirmed aggregate and one outbox operation transactionally.
+3. Clears active state, or reveals the next recovered draft.
+4. Refreshes History and dispatches optional telemetry/notification/widget work.
 
 Local save is the source of truth. Telemetry completion is deliberately
 fire-and-forget.
@@ -165,17 +161,12 @@ active. It does not delete saved trip history.
 
 ## Trip Sample Capture
 
-The speedometer captures trip samples while:
+`src/recording/controller.ts` captures trip samples while:
 
-- `isTripActive` is true.
-- `isTripPaused` is false.
-- `currentTripStart` exists.
+- The confirmed session is recording and storage has no pending failure.
+- The app is foregrounded and a fresh, valid ordered sensor event is available.
 
-Capture interval:
-
-```ts
-const TRIP_SPEED_SAMPLE_INTERVAL_MS = 500;
-```
+The minimum interval between accepted sensor timestamps is 500 ms.
 
 Each captured `TripSpeedSample` stores:
 
@@ -200,11 +191,9 @@ Each captured `TripSpeedSample` stores:
 - moving/stopped flags
 - stale flag
 
-The sample is pushed into `currentTripSamples.current` and handed to
-`tripTelemetryService.recordSample(sample)`.
-
-Important: samples are persisted to SQLite when the trip is saved. During the
-trip they are held in memory and streamed to telemetry if configured.
+Each sample and its aggregate checkpoint commit to SQLite before optional
+telemetry receives it. A failed append keeps its original sequence/time for
+retry. No in-memory sample array replaces durable rows at finalization.
 
 ## Settings
 
@@ -250,21 +239,24 @@ When enabled:
 
 - Sustained `state.isMoving` starts a trip.
 - Sustained `state.isStopped` pauses a trip.
-- Movement resumes a paused trip.
+- Movement resumes only an automatically paused trip. Recovered/manual pauses
+  require an explicit Resume.
 
 The moving/stopped flags come from the speed hook and ultimately from native
 or JS speed state.
 
 ### Trip Recovery And Background Surfaces
 
-The app creates a draft trip when recording starts and appends samples locally
-while the trip is active. React no longer auto-saves just because the app moves
-to the background; active trips are owned by the native live drive session until
-the user stops/saves them.
+`usePersonalRecording` connects the shared controller to AppState and the HUD.
+Backgrounding checkpoints and marks a sampling gap while native tracking/glance
+surfaces continue. Foreground sampling accepts fresh events. `recoverRecordings`
+restores all unfinished drafts paused; the user explicitly resumes or saves.
+Widget snapshots do not provide a durable native sample journal. OS suspension
+or termination may leave gaps after the confirmed checkpoint. Physical-device
+evidence is required before claiming native background/process-death continuity.
 
-If the app closes unexpectedly, `recoverActiveTrip()` restores the unfinished
-draft on next launch. Widgets, Live Activities, and the Android active-trip
-notification consume the drive-surface state produced by native code.
+See [Local data and export](./local-data-and-export.md) for transaction, migration
+and storage-error behavior.
 
 ### Orientation
 
@@ -345,10 +337,10 @@ Primary components:
 - `FindFriendsScreen`
 - `LeaderboardsScreen`
 
-They consume the provider-neutral cloud API from `src/cloud`. If Supabase env
-vars are missing or the user is signed out, these screens show offline/auth
-states. The dashboard, history, insights, and export flows continue to use local
-SQLite only.
+They consume the provider-neutral cloud API from `src/cloud`. Local is the
+default. Legacy cloud access requires explicit provider configuration and a
+session; otherwise these screens show offline/auth states. The dashboard,
+history, insights and exports use local SQLite.
 
 `AccountSyncScreen` handles separate auth screens, first-time signed-up
 onboarding, account preference edits, coarse nearby permission, sync now,

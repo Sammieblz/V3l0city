@@ -5,6 +5,15 @@ export type TripSignalQuality = 'good' | 'medium' | 'poor';
 export type TripHeadingSource = 'none' | 'course' | 'device';
 export type TripRecordStatus = 'draft' | 'completed';
 export type TripSyncStatus = 'local' | 'pending' | 'synced' | 'error';
+export type RecordingState = 'recording' | 'paused' | 'completed';
+export type RecordingGapReason = 'restart' | 'background' | 'paused' | 'permission' | 'sensor' | 'storage' | 'sampling';
+export type RecordingGap = {
+  id: string;
+  tripId: string;
+  reason: RecordingGapReason;
+  startedAt: string;
+  endedAt: string | null;
+};
 
 export type Trip = {
   id: string;
@@ -21,6 +30,18 @@ export type Trip = {
   cloudSyncedAt?: string | null;
   cloudSyncError?: string | null;
   syncStatus?: TripSyncStatus;
+  recordingGaps?: RecordingGap[];
+};
+
+/** Confirmed local state; neither a widget snapshot nor a connected grant. */
+export type RecordingSession = {
+  trip: Trip;
+  state: RecordingState;
+  checkpointAt: string;
+  lastSampleSequence: number;
+  lastSampleRecordedAt: string | null;
+  lastSampleElapsedMs: number;
+  gaps: RecordingGap[];
 };
 
 export type TripSpeedSample = {

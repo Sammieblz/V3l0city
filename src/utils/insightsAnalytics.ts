@@ -189,16 +189,23 @@ const buildHeatmap = (trips: TripWithSpeedSamples[]) => {
             ? rawDurationMs
             : SAMPLE_DURATION_FALLBACK_MS;
 
-        addHeatmapDuration(
-          cells,
-          trip.id,
-          currentMs,
-          durationMs,
-          sample.speedMps,
-          1,
-        );
+        // A known missing interval cannot become measured movement merely
+        // because two surviving readings surround it.
+        let segments: [number, number][] = [[currentMs, currentMs + durationMs]];
+        for (const gap of trip.recordingGaps ?? []) {
+          const from = Date.parse(gap.startedAt);
+          const to = Date.parse(gap.endedAt ?? trip.endedAt);
+          segments = segments.flatMap(([start, end]): [number, number][] => {
+            if (to <= start || from >= end) return [[start, end]];
+            return [...(from > start ? [[start, from] as [number, number]] : []),
+              ...(to < end ? [[to, end] as [number, number]] : [])];
+          });
+        }
+        segments.forEach(([start, end], segmentIndex) => addHeatmapDuration(
+          cells, trip.id, start, end - start, sample.speedMps, segmentIndex === 0 ? 1 : 0,
+        ));
       });
-    } else {
+    } else if (!trip.recordingGaps?.length) {
       addHeatmapDuration(
         cells,
         trip.id,

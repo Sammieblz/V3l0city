@@ -16,6 +16,24 @@ of commits. Windows shells can use `npm.cmd`/`npx.cmd` when PowerShell blocks
 the `.ps1` wrappers. Native builds still require the platform's Xcode/CocoaPods
 or Android SDK/JDK toolchain.
 
+Local-storage regression fixtures use `better-sqlite3` against temporary files:
+old/current upgrades, killed-process rollback, real `SQLITE_FULL`, controller
+recovery, import receipts and account-scoped cache cleanup. They do not open an
+installed app's database or any hosted provider. See the
+[Local recording implementation record](./local-recording-implementation-record.md)
+for remaining device gates.
+
+`npm run test:glance-projections` compiles and executes the framework-free Swift
+and Kotlin helpers actually used by native glance managers. It requires `swiftc`,
+`kotlinc` and `java` on PATH (or exact `GLANCE_SWIFTC`, `GLANCE_KOTLINC`,
+`GLANCE_JAVA` executable paths). Missing compilers fail; there is no skip mode.
+The mandatory native CI job runs these alongside the C++ suite. This is separate
+from compiling the full iOS/Android app and testing widgets on physical devices.
+
+PR CI also exports both Android and iOS JavaScript/Hermes bundles with Metro.
+Local equivalent: `npx expo export --platform android --platform ios --max-workers 2`.
+Bundle success proves packaging, not native SDK or device behavior.
+
 ## Run the App
 
 iOS development build:

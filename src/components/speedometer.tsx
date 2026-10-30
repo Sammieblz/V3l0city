@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated as RNAnimated,
-  AppState,
   BackHandler,
   Easing,
   Linking,
@@ -58,13 +57,9 @@ import {
   type ThemePreference,
 } from '../database/preferencesRepository';
 import {
-  appendTripSpeedSample,
   clearTrips,
-  createDraftTrip,
   getPendingSyncChangeCount,
   getTrips,
-  recoverActiveTrip,
-  saveTrip,
 } from '../database/tripRepository';
 import {
   startLiveDriveSession,
@@ -73,8 +68,10 @@ import {
 } from '../driveSurface/driveSurfaceStore';
 import { registerCarTripController } from '../car/carActions';
 import { buildDriveSurfaceSnapshot } from '../driveSurface/snapshot';
-import type { Trip, TripSpeedSample } from '../domain/trip';
+import type { Trip } from '../domain/trip';
 import { useVelocitySensors } from '../hooks/useVelocitySensors';
+import { usePersonalRecording } from '../recording/usePersonalRecording';
+import { RecordingNotice } from '../recording/RecordingNotice';
 import {
   hasCompletedLocalOnboarding,
   markLocalOnboardingComplete,
@@ -102,7 +99,6 @@ const MOUNT_OPTIONS = [
   { label: 'left', offset: -90 },
 ] as const;
 
-const TRIP_SPEED_SAMPLE_INTERVAL_MS = 500;
 const DRIVE_SURFACE_UPDATE_INTERVAL_MS = 1000;
 const SIMULATED_DRIVE_ENABLED_BY_ENV =
   process.env.EXPO_PUBLIC_V3L0CITY_SIMULATED_DRIVE === '1';
@@ -197,9 +193,8 @@ export default function Speedometer({
   const [currentOrientation, setCurrentOrientation] = useState<
     'portrait' | 'landscape'
   >('portrait');
-  const [isTripActive, setIsTripActive] = useState(false);
-  const [isTripPaused, setIsTripPaused] = useState(false);
-  const [currentTripStart, setCurrentTripStart] = useState<Date | null>(null);
+  const [dataHydrated, setDataHydrated] = useState(false);
+  const [storageReadError, setStorageReadError] = useState<string | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [activeScreen, setActiveScreen] =
@@ -230,20 +225,42 @@ export default function Speedometer({
   const dimensions = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const pulseAnim = useRef(new RNAnimated.Value(1)).current;
-  const appState = useRef(AppState.currentState);
   const prevStatus = useRef<string | null>(null);
   const orientationListener = useRef<ScreenOrientation.Subscription | null>(
     null,
   );
   const hasAutoStartedThisSession = useRef(false);
-  const currentTripSamples = useRef<TripSpeedSample[]>([]);
-  const lastTripSampleTimestamp = useRef<number | null>(null);
-  const nextTripSampleSequence = useRef(1);
-  const currentTripId = useRef<string | null>(null);
-  const currentTripBaseDistanceMeters = useRef(0);
-  const currentTripBaseMaxSpeedMps = useRef(0);
   const lastDriveSurfaceWriteAt = useRef(0);
   const liveDriveSessionActive = useRef(false);
+  const surfaceGeneration = useRef(0);
+  const latestSurfaceSnapshot = useRef<ReturnType<typeof buildDriveSurfaceSnapshot> | null>(null);
+  const recording = usePersonalRecording({
+    started: (trip) => tripTelemetryService.startTrip(trip),
+    sample: (sample) => tripTelemetryService.recordSample(sample),
+    completed: (trip) => {
+      // Each side effect is independent of the committed local save and of the
+      // other effects. Hung native/network promises cannot strand the HUD.
+      surfaceGeneration.current++;
+      liveDriveSessionActive.current = false;
+      const snapshot = latestSurfaceSnapshot.current;
+      if (snapshot) void stopLiveDriveSession({ ...snapshot, tripActive: false, tripPaused: false,
+        stale: true, signalText: 'Trip saved', updatedAtMs: Date.now() })
+        .catch((error) => logAppWarning('drive-surface', error));
+      void syncSavedTripIfAllowed();
+      void tripTelemetryService.completeTrip(trip).catch((error) => logAppWarning('telemetry', error));
+      void scheduleTripSavedNotification(trip).catch((error) => logAppWarning('notifications', error));
+      void getTrips().then(setTrips).catch((error) => {
+        logAppWarning('storage', error);
+        setStorageReadError('Saved trip history could not be loaded. Retry reading this device.');
+      });
+    },
+    failed: (error) => logAppWarning('storage', error),
+  });
+  const isTripActive = recording.active;
+  const isTripPaused = recording.active && (recording.session?.state === 'paused' || recording.error != null);
+  const recordedStartedAt = recording.session?.trip.startedAt;
+  const currentTripStart = useMemo(() => recording.active && recordedStartedAt
+    ? new Date(recordedStartedAt) : null, [recording.active, recordedStartedAt]);
 
   useEffect(() => {
     if (isTripActive) {
@@ -273,7 +290,7 @@ export default function Speedometer({
   const mountLabel = MOUNT_OPTIONS[mountIndex].label;
   const { state, reset } = useVelocitySensors({
     mountOffsetDegrees: mountOffset,
-    accumulateTrip: isTripActive && !isTripPaused,
+    accumulateTrip: recording.accumulating,
     simulationEnabled: __DEV__ && simulationEnabled,
   });
 
@@ -329,33 +346,23 @@ export default function Speedometer({
     dimensions.height - insets.top - spacing.lg,
   );
 
-  const effectiveDistanceMeters = isTripActive
-    ? currentTripBaseDistanceMeters.current + distanceMeters
-    : distanceMeters;
-  const effectiveMaxSpeedMps = isTripActive
-    ? Math.max(currentTripBaseMaxSpeedMps.current, maxSpeedMps)
-    : maxSpeedMps;
-  const activeElapsedSeconds =
-    isTripActive && currentTripStart
-      ? Math.max(1, (Date.now() - currentTripStart.getTime()) / 1000)
-      : 0;
-  const effectiveAverageSpeedMps =
-    isTripActive && activeElapsedSeconds > 0
-      ? effectiveDistanceMeters / activeElapsedSeconds
-      : averageSpeedMps;
+  const displayedTrip = isTripActive ? recording.session?.trip : recording.lastCompleted;
+  const effectiveDistanceMeters = displayedTrip?.totalDistanceMeters ?? distanceMeters;
+  const effectiveMaxSpeedMps = displayedTrip?.maxSpeedMps ?? maxSpeedMps;
+  const effectiveAverageSpeedMps = displayedTrip?.averageSpeedMps ?? averageSpeedMps;
 
   const speedDisplay = toDisplaySpeed(speedMps, units);
   const averageDisplay = toDisplaySpeed(effectiveAverageSpeedMps, units);
   const maxDisplay = toDisplaySpeed(effectiveMaxSpeedMps, units);
   const distanceDisplay = toDisplayDistance(effectiveDistanceMeters, units);
   const maxDisplayRounded = Math.round(maxDisplay);
-  const formattedElapsed = new Date(elapsedMs).toISOString().substring(11, 19);
+  const formattedElapsed = new Date(Math.max(0, elapsedMs)).toISOString().substring(11, 19);
   const driveSurfaceSnapshot = useMemo(
     () =>
       buildDriveSurfaceSnapshot({
         state,
         units,
-        tripId: currentTripId.current,
+        tripId: isTripActive ? recording.session?.trip.id ?? null : null,
         tripActive: isTripActive,
         tripPaused: isTripPaused,
         distanceMeters: effectiveDistanceMeters,
@@ -374,8 +381,10 @@ export default function Speedometer({
       simulationEnabled,
       state,
       units,
+      recording.session?.trip.id,
     ],
   );
+  latestSurfaceSnapshot.current = driveSurfaceSnapshot;
 
   const isPoorSignal = quality === 'poor';
   const isPermissionError = status === 'permission_denied';
@@ -408,22 +417,22 @@ export default function Speedometer({
   }, []);
 
   const refreshDrawerAccountSummary = useCallback(async () => {
-    const pendingCount = await getPendingSyncChangeCount();
-    if (!isCloudConfigured()) {
-      setDrawerAccountSummary({
-        signedIn: false,
-        title: 'Offline build',
-        subtitle:
-          pendingCount > 0
-            ? `${pendingCount} local change${
-                pendingCount === 1 ? '' : 's'
-              } saved`
-            : 'Cloud backup is not configured',
-      });
-      return;
-    }
-
     try {
+      const pendingCount = await getPendingSyncChangeCount();
+      if (!isCloudConfigured()) {
+        setDrawerAccountSummary({
+          signedIn: false,
+          title: 'Offline build',
+          subtitle:
+            pendingCount > 0
+              ? `${pendingCount} local change${
+                  pendingCount === 1 ? '' : 's'
+                } saved`
+              : 'Cloud backup is not configured',
+        });
+        return;
+      }
+
       const session = await cloudAuth.getSession();
       if (!session) {
         setDrawerAccountSummary({
@@ -462,8 +471,9 @@ export default function Speedometer({
     }
   }, []);
 
-  useEffect(() => {
-    const load = async () => {
+  const loadPersonalData = useCallback(async () => {
+    setDataHydrated(false);
+    try {
       const [prefs, storedTrips, completedLocalOnboarding] = await Promise.all([
         getPreferences(),
         getTrips(),
@@ -483,31 +493,26 @@ export default function Speedometer({
         setOrientationMode(prefs.orientationMode ?? 'portrait');
       }
       setTrips(storedTrips);
-      const recovered = await recoverActiveTrip();
-      if (recovered) {
-        const lastSample = recovered.speedSamples.at(-1);
-        currentTripSamples.current = recovered.speedSamples;
-        lastTripSampleTimestamp.current = lastSample
-          ? new Date(lastSample.recordedAt).getTime()
-          : null;
-        nextTripSampleSequence.current = (lastSample?.sequence ?? 0) + 1;
-        currentTripId.current = recovered.id;
-        currentTripBaseDistanceMeters.current =
-          lastSample?.distanceMeters ?? recovered.totalDistanceMeters;
-        currentTripBaseMaxSpeedMps.current = recovered.maxSpeedMps;
-        setCurrentTripStart(new Date(recovered.startedAt));
-        setIsTripActive(true);
-        setIsTripPaused(true);
-        setToastMessage({
-          message: 'Recovered unfinished trip',
-          variant: 'warning',
-        });
-      }
       await applyOrientation(prefs?.orientationMode ?? 'portrait');
-    };
-    void load();
+      setStorageReadError(null);
+      setDataHydrated(true);
+    } catch (error) {
+      logAppWarning('storage', error);
+      setStorageReadError('Personal data could not be read. Retry before starting a recording.');
+    }
+  }, [applyOrientation]);
+  useEffect(() => {
+    void loadPersonalData();
     void refreshDrawerAccountSummary();
-  }, [applyOrientation, refreshDrawerAccountSummary]);
+  }, [loadPersonalData, refreshDrawerAccountSummary]);
+  const recoveredUnits = recording.session?.trip.units;
+  const recoveredMountLabel = recording.session?.trip.mountLabel;
+  useEffect(() => {
+    if (!dataHydrated || !recording.recovered || !recoveredUnits) return;
+    setUnits(recoveredUnits);
+    const index = MOUNT_OPTIONS.findIndex((option) => option.label === recoveredMountLabel);
+    if (index >= 0) setMountIndex(index);
+  }, [dataHydrated, recording.recovered, recoveredUnits, recoveredMountLabel]);
 
   useEffect(() => {
     if (drawerOpen) {
@@ -516,15 +521,20 @@ export default function Speedometer({
   }, [drawerOpen, refreshDrawerAccountSummary]);
 
   useEffect(() => {
+    if (!dataHydrated) return;
     const persist = async () => {
-      await savePreferences({
+      try { await savePreferences({
         units,
         mountIndex,
         autoStart,
         autoSave,
         orientationMode,
         themePreference,
-      });
+      }); } catch (error) {
+        logAppWarning('storage', error);
+        setStorageReadError('Preferences could not be saved. Retry reading this device.');
+        setDataHydrated(false);
+      }
     };
     void persist();
   }, [
@@ -534,6 +544,7 @@ export default function Speedometer({
     autoSave,
     orientationMode,
     themePreference,
+    dataHydrated,
   ]);
 
   useEffect(() => {
@@ -634,128 +645,43 @@ export default function Speedometer({
   }, [refreshDrawerAccountSummary]);
 
   const startTrip = useCallback(async () => {
-    if (isTripActive) return;
-    const start = new Date();
-    const tripId = `${start.getTime()}`;
-    const draftTrip: Trip = {
-      id: tripId,
-      startedAt: start.toISOString(),
-      endedAt: start.toISOString(),
-      totalDistanceMeters: 0,
-      maxSpeedMps: 0,
-      averageSpeedMps: 0,
-      units,
-      mountLabel,
-      recordStatus: 'draft',
-    };
-    await createDraftTrip(draftTrip);
-    reset();
-    currentTripSamples.current = [];
-    lastTripSampleTimestamp.current = null;
-    nextTripSampleSequence.current = 1;
-    currentTripId.current = tripId;
-    currentTripBaseDistanceMeters.current = 0;
-    currentTripBaseMaxSpeedMps.current = 0;
-    setIsTripActive(true);
-    setIsTripPaused(false);
-    setCurrentTripStart(start);
-    liveDriveSessionActive.current = false;
-    void tripTelemetryService.startTrip(draftTrip);
-  }, [isTripActive, mountLabel, reset, units]);
+    if (!dataHydrated || isPermissionError || isPreciseLocationError || isSensorUnavailable) return false;
+    const started = await recording.controller.start({ units, mountLabel });
+    if (started) hasAutoStartedThisSession.current = true;
+    return started;
+  }, [dataHydrated, isPermissionError, isPreciseLocationError, isSensorUnavailable, recording.controller, units, mountLabel]);
 
-  const stopAndSaveTrip = useCallback(async () => {
-    if (!isTripActive) return;
-    const end = new Date();
-    const start = currentTripStart ?? end;
-    const tripId = currentTripId.current ?? `${start.getTime()}`;
-    const totalDistanceMeters =
-      currentTripBaseDistanceMeters.current + distanceMeters;
-    const totalElapsedSeconds = Math.max(
-      1,
-      (end.getTime() - start.getTime()) / 1000,
-    );
-    const trip: Trip = {
-      id: tripId,
-      startedAt: start.toISOString(),
-      endedAt: end.toISOString(),
-      totalDistanceMeters,
-      maxSpeedMps: Math.max(currentTripBaseMaxSpeedMps.current, maxSpeedMps),
-      averageSpeedMps: totalDistanceMeters / totalElapsedSeconds,
-      units,
-      mountLabel,
-      recordStatus: 'completed',
-    };
-    const samples = currentTripSamples.current;
-
-    await saveTrip(trip, samples);
-    await stopLiveDriveSession({
-      ...driveSurfaceSnapshot,
-      tripActive: false,
-      tripPaused: false,
-      stale: true,
-      signalText: 'Trip saved',
-      updatedAtMs: Date.now(),
-    });
-    liveDriveSessionActive.current = false;
-    void syncSavedTripIfAllowed();
-    void tripTelemetryService.completeTrip(trip);
-    const stored = await getTrips();
-    setTrips(stored);
-    setIsTripActive(false);
-    setIsTripPaused(false);
-    setCurrentTripStart(null);
-    currentTripSamples.current = [];
-    lastTripSampleTimestamp.current = null;
-    nextTripSampleSequence.current = 1;
-    currentTripId.current = null;
-    currentTripBaseDistanceMeters.current = 0;
-    currentTripBaseMaxSpeedMps.current = 0;
-    hasAutoStartedThisSession.current = false;
-    void scheduleTripSavedNotification(trip);
-  }, [
-    currentTripStart,
-    distanceMeters,
-    driveSurfaceSnapshot,
-    isTripActive,
-    maxSpeedMps,
-    mountLabel,
-    syncSavedTripIfAllowed,
-    units,
-  ]);
+  const stopAndSaveTrip = useCallback(() => recording.controller.finish(), [recording.controller]);
 
   const handleTripToggle = async () => {
     if (!isTripActive) {
-      await startTrip();
-      showToast('Trip started', 'success');
+      if (await startTrip()) showToast('Trip started', 'success');
       return;
     }
 
-    await stopAndSaveTrip();
-    showToast('Trip saved', 'success');
+    if (await stopAndSaveTrip()) showToast('Trip saved', 'success');
   };
 
   const handleReset = () => {
     reset();
+    recording.controller.clearLastCompleted();
     setElapsedMs(0);
   };
 
   const pauseTripFromCar = useCallback(async () => {
-    if (!isTripActive || isTripPaused) return;
-    setIsTripPaused(true);
-    showToast('Trip paused', 'warning');
-  }, [isTripActive, isTripPaused, showToast]);
+    if (await recording.controller.pause()) showToast('Trip paused', 'warning');
+  }, [recording.controller, showToast]);
 
   const resumeTripFromCar = useCallback(async () => {
-    if (!isTripActive || !isTripPaused || isPermissionError || isSensorUnavailable) {
+    if (isPermissionError || isPreciseLocationError || isSensorUnavailable) {
       return;
     }
-    setIsTripPaused(false);
-    showToast('Trip resumed', 'success');
+    if (await recording.controller.resume()) showToast('Trip resumed', 'success');
   }, [
     isPermissionError,
+    isPreciseLocationError,
     isSensorUnavailable,
-    isTripActive,
-    isTripPaused,
+    recording.controller,
     showToast,
   ]);
 
@@ -766,27 +692,25 @@ export default function Speedometer({
           const blocked =
             isPermissionError || isPreciseLocationError || isSensorUnavailable;
           return {
-            available: true,
+            available: dataHydrated && recording.ready && !recording.busy && !recording.error,
             tripActive: isTripActive,
             tripPaused: isTripPaused,
-            canStart: !isTripActive && !blocked,
-            canPause: isTripActive && !isTripPaused,
-            canResume: isTripActive && isTripPaused && !blocked,
-            canStop: isTripActive,
+            canStart: dataHydrated && recording.ready && !recording.busy && !recording.error && !isTripActive && !blocked,
+            canPause: isTripActive && !isTripPaused && !recording.busy && !recording.error,
+            canResume: isTripActive && isTripPaused && !blocked && !recording.busy && !recording.error,
+            canStop: isTripActive && !recording.busy && !recording.error,
             unavailableReason: blocked
               ? 'Check location and sensor permissions on your phone.'
               : undefined,
           };
         },
         startTrip: async () => {
-          await startTrip();
-          showToast('Trip started', 'success');
+          if (await startTrip()) showToast('Trip started', 'success');
         },
         pauseTrip: pauseTripFromCar,
         resumeTrip: resumeTripFromCar,
         stopAndSaveTrip: async () => {
-          await stopAndSaveTrip();
-          showToast('Trip saved', 'success');
+          if (await stopAndSaveTrip()) showToast('Trip saved', 'success');
         },
       }),
     [
@@ -800,6 +724,10 @@ export default function Speedometer({
       showToast,
       startTrip,
       stopAndSaveTrip,
+      dataHydrated,
+      recording.ready,
+      recording.busy,
+      recording.error,
     ],
   );
 
@@ -814,8 +742,14 @@ export default function Speedometer({
   };
 
   const handleClearHistory = async () => {
-    await clearTrips();
-    setTrips([]);
+    try {
+      await clearTrips();
+      setTrips(await getTrips());
+      setStorageReadError(null);
+    } catch (error) {
+      logAppWarning('storage', error);
+      setStorageReadError('History could not be cleared or refreshed. Retry reading this device.');
+    }
   };
 
   const openDrawer = () => setDrawerOpen(true);
@@ -955,7 +889,7 @@ export default function Speedometer({
     })),
   }));
 
-  const canReset = !isTripActive && distanceMeters > 0;
+  const canReset = !isTripActive && effectiveDistanceMeters > 0;
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener(
@@ -1018,53 +952,8 @@ export default function Speedometer({
   };
 
   useEffect(() => {
-    if (!isTripActive || isTripPaused || !currentTripStart) {
-      return;
-    }
-
-    const rawSampleTimestampMs =
-      state.timestampMs > 0 ? state.timestampMs : Date.now();
-    const sampleTimestampMs = Math.max(
-      rawSampleTimestampMs,
-      currentTripStart.getTime(),
-    );
-    const lastSampleTimestamp = lastTripSampleTimestamp.current;
-    if (
-      lastSampleTimestamp != null &&
-      sampleTimestampMs - lastSampleTimestamp < TRIP_SPEED_SAMPLE_INTERVAL_MS
-    ) {
-      return;
-    }
-
-    lastTripSampleTimestamp.current = sampleTimestampMs;
-    const sample: TripSpeedSample = {
-      tripId: currentTripId.current ?? '',
-      sequence: nextTripSampleSequence.current,
-      recordedAt: new Date(sampleTimestampMs).toISOString(),
-      elapsedMs: Math.max(0, sampleTimestampMs - currentTripStart.getTime()),
-      speedMps: state.speedMps,
-      distanceMeters: currentTripBaseDistanceMeters.current + state.distanceMeters,
-      headingDegrees: state.headingDegrees,
-      headingSource: state.headingSource,
-      headingAccuracyDegrees: state.headingAccuracyDegrees,
-      headingQuality: state.headingQuality,
-      headingReasons: state.headingReasons,
-      source: state.source,
-      quality: state.quality,
-      qualityScore: state.qualityScore,
-      qualityReasons: state.qualityReasons,
-      gpsAccuracyMeters: state.gpsAccuracyMeters,
-      fixAgeMs: state.fixAgeMs,
-      nativeSpeedUsed: state.nativeSpeedUsed,
-      isMoving: state.isMoving,
-      isStopped: state.isStopped,
-      stale: state.stale,
-    };
-    currentTripSamples.current.push(sample);
-    void appendTripSpeedSample(sample);
-    tripTelemetryService.recordSample(sample);
-    nextTripSampleSequence.current += 1;
-  }, [isTripActive, isTripPaused, currentTripStart, state]);
+    void recording.controller.observe(state);
+  }, [recording.controller, state]);
 
   useEffect(() => {
     if (!isTripActive || !currentTripStart) {
@@ -1073,7 +962,7 @@ export default function Speedometer({
     }
 
     const update = () => {
-      setElapsedMs(Date.now() - currentTripStart.getTime());
+      setElapsedMs(Math.max(0, Date.now() - currentTripStart.getTime()));
     };
 
     update();
@@ -1082,26 +971,32 @@ export default function Speedometer({
   }, [isTripActive, currentTripStart]);
 
   useEffect(() => {
+    if (!isTripActive && state.isStopped) hasAutoStartedThisSession.current = false;
+  }, [isTripActive, state.isStopped]);
+
+  useEffect(() => {
     if (
       autoStart &&
       !isTripActive &&
       !isPermissionError &&
+      !isPreciseLocationError &&
       !isSensorUnavailable &&
+      dataHydrated && recording.ready && !recording.busy && !recording.error &&
       state.isMoving &&
       !hasAutoStartedThisSession.current
     ) {
-      hasAutoStartedThisSession.current = true;
-      void startTrip();
-      showToast('Trip autostarted', 'success');
+      void startTrip().then((started) => { if (started) showToast('Trip autostarted', 'success'); });
     }
   }, [
     autoStart,
     isTripActive,
     isPermissionError,
+    isPreciseLocationError,
     isSensorUnavailable,
     showToast,
     startTrip,
     state.isMoving,
+    dataHydrated, recording.ready, recording.busy, recording.error,
   ]);
 
   useEffect(() => {
@@ -1110,20 +1005,22 @@ export default function Speedometer({
       isTripActive &&
       !isTripPaused &&
       !isPermissionError &&
+      !isPreciseLocationError &&
       !isSensorUnavailable &&
       state.isStopped
     ) {
-      setIsTripPaused(true);
-      showToast('Trip paused', 'warning');
+      void recording.controller.pause('paused', true).then((paused) => { if (paused) showToast('Trip paused', 'warning'); });
     }
   }, [
     autoStart,
     isTripActive,
     isTripPaused,
     isPermissionError,
+    isPreciseLocationError,
     isSensorUnavailable,
     showToast,
     state.isStopped,
+    recording.controller,
   ]);
 
   useEffect(() => {
@@ -1131,21 +1028,24 @@ export default function Speedometer({
       autoStart &&
       isTripActive &&
       isTripPaused &&
+      recording.autoPaused &&
       !isPermissionError &&
+      !isPreciseLocationError &&
       !isSensorUnavailable &&
       state.isMoving
     ) {
-      setIsTripPaused(false);
-      showToast('Trip resumed', 'success');
+      void recording.controller.resume().then((resumed) => { if (resumed) showToast('Trip resumed', 'success'); });
     }
   }, [
     autoStart,
     isTripActive,
     isTripPaused,
     isPermissionError,
+    isPreciseLocationError,
     isSensorUnavailable,
     showToast,
     state.isMoving,
+    recording.controller, recording.autoPaused,
   ]);
 
   useEffect(() => {
@@ -1154,6 +1054,7 @@ export default function Speedometer({
       return;
     }
     lastDriveSurfaceWriteAt.current = now;
+    const generation = ++surfaceGeneration.current;
 
     const publish = async () => {
       try {
@@ -1161,17 +1062,20 @@ export default function Speedometer({
           if (liveDriveSessionActive.current) {
             await updateLiveDriveSession(driveSurfaceSnapshot);
           } else {
-            await startLiveDriveSession(driveSurfaceSnapshot);
             liveDriveSessionActive.current = true;
+            await startLiveDriveSession(driveSurfaceSnapshot);
           }
-          return;
-        }
-
-        if (liveDriveSessionActive.current) {
-          await stopLiveDriveSession(driveSurfaceSnapshot);
+        } else if (liveDriveSessionActive.current) {
           liveDriveSessionActive.current = false;
+          await stopLiveDriveSession(driveSurfaceSnapshot);
         } else {
           await updateLiveDriveSession(driveSurfaceSnapshot);
+        }
+        // A slow native start/update must not revive an already-saved session.
+        const desired = latestSurfaceSnapshot.current;
+        if (generation !== surfaceGeneration.current && desired
+          && (!desired.tripActive || desired.tripPaused)) {
+          await stopLiveDriveSession(desired);
         }
       } catch (error) {
         logAppWarning('drive-surface', error);
@@ -1180,26 +1084,6 @@ export default function Speedometer({
 
     void publish();
   }, [driveSurfaceSnapshot]);
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextState) => {
-      const prevState = appState.current;
-      appState.current = nextState;
-      if (
-        prevState === 'active' &&
-        (nextState === 'background' || nextState === 'inactive') &&
-        isTripActive
-      ) {
-        // Active trips now belong to the native live session while the app is
-        // backgrounded. Crash recovery finalizes drafts later if needed.
-        return;
-      }
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, [isTripActive]);
 
   useEffect(() => {
     if (prevStatus.current === status) {
@@ -1265,11 +1149,20 @@ export default function Speedometer({
     return null;
   };
 
+  const recordingNotice = <RecordingNotice recording={recording} readError={storageReadError}
+    allowResume={dataHydrated && status === 'ready' && !isPermissionError && !isPreciseLocationError && !isSensorUnavailable}
+    onResume={() => { void resumeTripFromCar(); }}
+    onRetry={() => { void recording.controller.retry(); }}
+    onReadRetry={() => { void loadPersonalData(); }} />;
+  const tripActionDisabled = !dataHydrated || !recording.ready || recording.busy || !!recording.error
+    || (!isTripActive && (isPermissionError || isPreciseLocationError || isSensorUnavailable));
+
   const renderTripButton = (compact = false) => (
     <View
       style={compact ? styles.landscapeTripButtonRow : styles.tripSection}
     >
       {isTripPaused && <Text style={styles.tripPausedLabel}>Trip paused</Text>}
+      {recordingNotice}
       <PressableScale
         style={[
           compact ? styles.landscapeTripButton : styles.tripButton,
@@ -1282,6 +1175,9 @@ export default function Speedometer({
               : styles.tripButtonIdle,
         ]}
         onPress={handleTripToggle}
+        disabled={tripActionDisabled}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: tripActionDisabled, busy: recording.busy }}
         pressedScale={compact ? 0.96 : 0.97}
       >
         {isTripActive && !isTripPaused && (
@@ -1293,7 +1189,7 @@ export default function Speedometer({
             isTripActive && styles.tripButtonTextActive,
           ]}
         >
-          {isTripPaused
+          {recording.busy ? 'Saving changes…' : isTripPaused
             ? 'Save & end'
             : isTripActive
               ? compact
@@ -1304,6 +1200,8 @@ export default function Speedometer({
                 : 'Start Trip'}
         </Text>
       </PressableScale>
+      {isTripActive && !isTripPaused && <Button mode="text" onPress={() => { void pauseTripFromCar(); }}
+        disabled={recording.busy || !!recording.error}>Pause recording</Button>}
 
       {!compact && canReset && (
         <PressableScale style={styles.resetButton} onPress={handleReset}>
@@ -1315,7 +1213,7 @@ export default function Speedometer({
 
   const renderPortraitDashboard = () => {
     const stateMessage = renderStateMessage();
-    if (stateMessage) return stateMessage;
+    if (stateMessage) return <ScrollView>{stateMessage}{renderTripButton(false)}</ScrollView>;
 
     const maxScale =
       speedDisplay > 160 ? 300 : speedDisplay > 80 ? 200 : 160;
@@ -1335,7 +1233,7 @@ export default function Speedometer({
           />
         </View>
 
-        {(!autoStart || isTripActive) && renderTripButton(false)}
+        {(!autoStart || isTripActive) ? renderTripButton(false) : recordingNotice}
 
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
@@ -1388,7 +1286,7 @@ export default function Speedometer({
 
   const renderLandscapeDashboard = () => {
     const stateMessage = renderStateMessage();
-    if (stateMessage) return stateMessage;
+    if (stateMessage) return <ScrollView>{stateMessage}{renderTripButton(true)}</ScrollView>;
 
     const maxScale =
       speedDisplay > 160 ? 300 : speedDisplay > 80 ? 200 : 160;
@@ -1455,7 +1353,7 @@ export default function Speedometer({
             </View>
           </View>
 
-          {(!autoStart || isTripActive) && renderTripButton(true)}
+          {(!autoStart || isTripActive) ? renderTripButton(true) : recordingNotice}
         </View>
       </View>
     );
@@ -1556,8 +1454,9 @@ export default function Speedometer({
         <View style={styles.settingsRow}>
           <Text style={styles.settingsLabel}>Trip recovery</Text>
           <Text style={styles.settingsHelper}>
-            Active trips keep live widget tracking in the background. Unfinished
-            drafts are recovered when V3l0city opens again.
+            Native live tracking can continue in the background. Missing sample
+            intervals are marked. After reopening, unfinished trips return paused
+            with the last data saved on this device; review them before resuming.
           </Text>
         </View>
 
@@ -1751,7 +1650,10 @@ export default function Speedometer({
             onOpenPrivacy={() => setActiveScreen('privacy')}
           />
         ) : activeScreen === 'history' ? (
-          <TripHistory trips={trips} onClear={handleClearHistory} />
+          <View style={{ flex: 1 }}>
+            {recordingNotice}
+            <TripHistory trips={trips} onClear={handleClearHistory} />
+          </View>
         ) : activeScreen === 'insights' ? (
           <InsightsScreen units={units} />
         ) : activeScreen === 'leaderboards' ? (

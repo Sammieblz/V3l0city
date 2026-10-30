@@ -43,11 +43,8 @@ private data class LiveDriveSession(
   val tripId: String?,
   val units: String,
   val tripPaused: Boolean,
-  val distanceOffsetMeters: Double,
-  val maxSpeedBaselineMps: Double,
   val startedAtMs: Double,
-  val simulationActive: Boolean,
-  val simulatedDistanceOffsetMeters: Double
+  val simulationActive: Boolean
 )
 
 internal object LiveDriveSessionManager : SensorEventListener {
@@ -67,6 +64,8 @@ internal object LiveDriveSessionManager : SensorEventListener {
   private var lastDriveSurfacePublishElapsedMs = 0L
   private var lastEngineState: Map<String, Any?> = emptyMap()
   private var liveDriveSession: LiveDriveSession? = null
+  private var liveProjection = LiveDriveProjection()
+  private var tripAccumulating = true
   private var simulatedPublisherActive = false
 
   private var linearAccelerationSensor: Sensor? = null
@@ -151,7 +150,10 @@ internal object LiveDriveSessionManager : SensorEventListener {
     }
   }
 
+  @Synchronized
   fun setTripAccumulation(active: Boolean) {
+    tripAccumulating = active
+    liveProjection.setAccumulating(active, System.currentTimeMillis().toDouble())
     if (engineHandle != 0L) {
       SpeedEngineJni.setTripAccumulation(engineHandle, active)
     }
@@ -173,11 +175,12 @@ internal object LiveDriveSessionManager : SensorEventListener {
     DriveSurfaceStore.clear(context.applicationContext)
   }
 
+  @Synchronized
   fun startLiveSession(context: Context, snapshot: Map<String, Any?>) {
     ensureInitialized(context)
-    updateLiveSession(snapshot)
+    if (!updateLiveSession(snapshot)) return
     lastDriveSurfacePublishElapsedMs = 0L
-    DriveSurfaceStore.startSession(context.applicationContext, snapshot)
+    DriveSurfaceStore.startSession(context.applicationContext, projectedDriveSnapshot(snapshot))
     if (liveDriveSession?.simulationActive == true) {
       startSimulatedPublisher()
       return
@@ -188,14 +191,15 @@ internal object LiveDriveSessionManager : SensorEventListener {
     startCollectors()
   }
 
+  @Synchronized
   fun updateLiveSession(context: Context, snapshot: Map<String, Any?>) {
     ensureInitialized(context)
     if (liveDriveSession == null && snapshot["tripActive"] != true) {
       DriveSurfaceStore.write(context.applicationContext, snapshot)
       return
     }
-    updateLiveSession(snapshot)
-    DriveSurfaceStore.write(context.applicationContext, snapshot)
+    if (!updateLiveSession(snapshot)) return
+    DriveSurfaceStore.write(context.applicationContext, projectedDriveSnapshot(snapshot))
     if (liveDriveSession?.simulationActive == true) {
       startSimulatedPublisher()
       return
@@ -203,15 +207,20 @@ internal object LiveDriveSessionManager : SensorEventListener {
     startCollectors()
   }
 
+  @Synchronized
   fun stopLiveSession(context: Context, snapshot: Map<String, Any?>) {
     ensureInitialized(context)
+    val tripId = snapshot["tripId"] as? String
+    if (tripId != null && liveDriveSession?.tripId != null && liveDriveSession?.tripId != tripId) return
     liveDriveSession = null
+    liveProjection = LiveDriveProjection().also { it.setAccumulating(tripAccumulating) }
     lastDriveSurfacePublishElapsedMs = 0L
     stopSimulatedPublisher()
     DriveSurfaceStore.stopSession(context.applicationContext, snapshot)
     stopCollectorsIfIdle()
   }
 
+  @Synchronized
   fun startFromStoredSession(context: Context) {
     ensureInitialized(context)
     if (!DriveSurfaceStore.isSessionActive(context.applicationContext)) {
@@ -219,7 +228,7 @@ internal object LiveDriveSessionManager : SensorEventListener {
       return
     }
     val snapshot = DriveSurfaceStore.read(context.applicationContext) ?: return
-    updateLiveSession(jsonObjectToMap(snapshot))
+    if (!updateLiveSession(jsonObjectToMap(snapshot))) return
     if (liveDriveSession?.simulationActive == true) {
       startSimulatedPublisher()
       return
@@ -290,6 +299,7 @@ internal object LiveDriveSessionManager : SensorEventListener {
     }
   }
 
+  @Synchronized
   private fun configureEngine(options: Map<String, Any?>) {
     if (engineHandle == 0L) {
       engineHandle = SpeedEngineJni.create()
@@ -299,6 +309,8 @@ internal object LiveDriveSessionManager : SensorEventListener {
     val outputRateHz = max(1.0, min(30.0, numericOption(options, "outputRateHz", 10.0)))
     val mountOffsetDegrees = numericOption(options, "mountOffsetDegrees", 0.0)
     val accumulateTrip = options["accumulateTrip"] as? Boolean ?: true
+    tripAccumulating = accumulateTrip
+    liveProjection.setAccumulating(accumulateTrip, System.currentTimeMillis().toDouble())
     outputIntervalMs = (1000.0 / outputRateHz).toLong()
     lastEmitElapsedMs = 0L
     SpeedEngineJni.setOptions(
@@ -440,6 +452,7 @@ internal object LiveDriveSessionManager : SensorEventListener {
     emitState(state, force = false)
   }
 
+  @Synchronized
   private fun emitState(
     state: Map<String, Any?>,
     force: Boolean,
@@ -472,30 +485,51 @@ internal object LiveDriveSessionManager : SensorEventListener {
     }
   }
 
-  private fun updateLiveSession(snapshot: Map<String, Any?>) {
+  private fun updateLiveSession(snapshot: Map<String, Any?>): Boolean {
     val nowMs = System.currentTimeMillis().toDouble()
-    val engineDistanceMeters = numberFrom(lastEngineState, "distanceMeters", 0.0)
-    val snapshotDistanceMeters = numberFrom(snapshot, "distanceMeters", 0.0)
     val elapsedMs = numberFrom(snapshot, "elapsedMs", 0.0)
     val simulationActive = boolFrom(snapshot, "simulationActive", false)
-    val simulatedDistanceOffsetMeters =
-      if (simulationActive) {
-        snapshotDistanceMeters - simulatedDistanceAt(elapsedMs / 1000.0)
-      } else {
-        0.0
-      }
+    val fresh = freshNativeState(lastEngineState, nowMs)
+    val counter = if (simulationActive) simulatedDistanceAt(elapsedMs / 1000.0)
+      else if (fresh) nullableNumberFrom(lastEngineState, "distanceMeters") else null
+    val timestamp = if (simulationActive) nowMs else if (fresh) nullableNumberFrom(lastEngineState, "timestampMs") else null
+    if (!liveProjection.synchronize(
+      tripId = snapshot["tripId"] as? String,
+      distanceMeters = numberFrom(snapshot, "distanceMeters", 0.0),
+      maxSpeedMps = numberFrom(snapshot, "maxSpeedMps", 0.0),
+      paused = boolFrom(snapshot, "tripPaused", false),
+      snapshotAtMs = numberFrom(snapshot, "updatedAtMs", nowMs),
+      nativeCounter = counter, nativeTimestampMs = timestamp
+    )) return false
     liveDriveSession = LiveDriveSession(
       tripId = snapshot["tripId"] as? String,
       units = snapshot["units"] as? String ?: "MPH",
       tripPaused = snapshot["tripPaused"] as? Boolean ?: false,
-      distanceOffsetMeters = max(0.0, snapshotDistanceMeters - engineDistanceMeters),
-      maxSpeedBaselineMps = max(
-        0.0,
-        numberFrom(snapshot, "maxSpeedMps", 0.0) - numberFrom(lastEngineState, "maxSpeedMps", 0.0)
-      ),
       startedAtMs = nowMs - max(0.0, elapsedMs),
-      simulationActive = simulationActive,
-      simulatedDistanceOffsetMeters = simulatedDistanceOffsetMeters
+      simulationActive = simulationActive
+    )
+    return true
+  }
+
+  private fun freshNativeState(state: Map<String, Any?>, nowMs: Double): Boolean {
+    val timestamp = numberFrom(state, "timestampMs", 0.0)
+    val fixAge = numberFrom(state, "fixAgeMs", 0.0)
+    return !boolFrom(state, "stale", false) && timestamp.isFinite() && timestamp > 0 &&
+      timestamp <= nowMs && nowMs - timestamp <= 3000 && fixAge.isFinite() && fixAge >= 0 && fixAge < 3000
+  }
+
+  // Call under the manager monitor: never rewind an already projected native
+  // session by immediately publishing a lagging JS summary after reconciliation.
+  private fun projectedDriveSnapshot(snapshot: Map<String, Any?>): Map<String, Any?> {
+    val units = snapshot["units"] as? String ?: "MPH"
+    val average = liveProjection.distanceMeters / max(1.0, numberFrom(snapshot, "elapsedMs", 0.0) / 1000.0)
+    return snapshot + mapOf(
+      "distanceMeters" to liveProjection.distanceMeters,
+      "distanceText" to formattedDistance(liveProjection.distanceMeters, units),
+      "maxSpeedMps" to liveProjection.maxSpeedMps,
+      "maxSpeedText" to formattedSpeed(liveProjection.maxSpeedMps, units),
+      "averageSpeedMps" to average,
+      "averageSpeedText" to formattedSpeed(average, units)
     )
   }
 
@@ -515,6 +549,7 @@ internal object LiveDriveSessionManager : SensorEventListener {
     mainHandler.removeCallbacks(simulatedDriveRunnable)
   }
 
+  @Synchronized
   private fun publishSimulatedLiveDriveSurface() {
     val session = liveDriveSession ?: return
     val activeContext = context ?: return
@@ -526,9 +561,10 @@ internal object LiveDriveSessionManager : SensorEventListener {
     val elapsedMs = max(0.0, nowMs - session.startedAtMs)
     val elapsedSeconds = elapsedMs / 1000.0
     val speedMps = simulatedSpeedAt(elapsedSeconds)
-    val distanceMeters = max(0.0, session.simulatedDistanceOffsetMeters + simulatedDistanceAt(elapsedSeconds))
-    val averageSpeedMps = if (elapsedSeconds > 1.0) distanceMeters / elapsedSeconds else 0.0
-    val maxSpeedMps = max(session.maxSpeedBaselineMps, simulatedMaxSpeedAt(elapsedSeconds))
+    liveProjection.observe(simulatedDistanceAt(elapsedSeconds), speedMps, nowMs, fresh = true)
+    val distanceMeters = liveProjection.distanceMeters
+    val averageSpeedMps = distanceMeters / max(1.0, elapsedSeconds)
+    val maxSpeedMps = liveProjection.maxSpeedMps
     val heading = simulatedHeadingAt(elapsedSeconds)
 
     DriveSurfaceStore.write(
@@ -563,23 +599,28 @@ internal object LiveDriveSessionManager : SensorEventListener {
     )
   }
 
+  @Synchronized
   private fun publishLiveDriveSurface(state: Map<String, Any?>, force: Boolean) {
     val session = liveDriveSession ?: return
     val activeContext = context ?: return
+    val nowMs = System.currentTimeMillis().toDouble()
+    val speedMps = numberFrom(state, "speedMps", 0.0)
+    val timestamp = numberFrom(state, "timestampMs", 0.0)
+    // Future/corrupt timestamps cannot push the projection watermark forward.
+    if (timestamp.isFinite() && timestamp > 0 && timestamp <= nowMs) {
+      liveProjection.observe(numberFrom(state, "distanceMeters", 0.0), speedMps,
+        timestamp, freshNativeState(state, nowMs))
+    }
     val nowElapsed = SystemClock.elapsedRealtime()
     if (!force && nowElapsed - lastDriveSurfacePublishElapsedMs < DRIVE_SURFACE_PUBLISH_INTERVAL_MS) {
       return
     }
     lastDriveSurfacePublishElapsedMs = nowElapsed
 
-    val nowMs = System.currentTimeMillis().toDouble()
-    val speedMps = numberFrom(state, "speedMps", 0.0)
-    val engineDistanceMeters = numberFrom(state, "distanceMeters", 0.0)
-    val distanceMeters = max(0.0, session.distanceOffsetMeters + engineDistanceMeters)
-    val maxSpeedMps = max(session.maxSpeedBaselineMps, numberFrom(state, "maxSpeedMps", 0.0))
+    val distanceMeters = liveProjection.distanceMeters
+    val maxSpeedMps = liveProjection.maxSpeedMps
     val elapsedMs = max(0.0, nowMs - session.startedAtMs)
-    val averageSpeedMps =
-      if (elapsedMs > 1000.0) distanceMeters / (elapsedMs / 1000.0) else numberFrom(state, "averageSpeedMps", 0.0)
+    val averageSpeedMps = distanceMeters / max(1.0, elapsedMs / 1000.0)
     val quality = state["quality"] as? String ?: "poor"
     val stale = state["stale"] as? Boolean ?: false
     val heading = nullableNumberFrom(state, "headingDegrees")

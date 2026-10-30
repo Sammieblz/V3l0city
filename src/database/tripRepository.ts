@@ -10,6 +10,10 @@ import type {
 } from '../domain/trip';
 import type { Units } from '../utils/speedMath';
 import { getDatabase } from './database';
+import { importRecordingGaps, readRecordingGaps, recoverRecordings } from './recordingRepository';
+export { createDraftTrip, appendTripSpeedSample, checkpointRecording, setRecordingPaused,
+  openRecordingGap, closeRecordingGap, recoverRecordings, getRecordingGaps, saveTrip,
+  RecordingStoreError } from './recordingRepository';
 
 type TripRow = {
   id: string;
@@ -162,23 +166,22 @@ const rowToOutboxOperation = (row: SyncOutboxRow): SyncOutboxOperation => ({
 });
 
 export const getTrips = async (): Promise<Trip[]> => {
-  try {
-    const db = getDatabase();
+  const db = getDatabase();
+  let result: Trip[] = [];
+  db.withTransactionSync(() => {
     const rows = db.getAllSync<TripRow>(
       `SELECT * FROM trips
        WHERE deleted_at IS NULL AND record_status = 'completed'
-       ORDER BY started_at DESC`
+       ORDER BY started_at DESC, id DESC`
     );
-    return rows.map(rowToTrip);
-  } catch {
-    return [];
-  }
+    result = rows.map((row) => ({ ...rowToTrip(row), recordingGaps: readRecordingGaps(db, row.id) }));
+  });
+  return result;
 };
 
 export const getTripSpeedSamples = async (
   tripId: string
 ): Promise<TripSpeedSample[]> => {
-  try {
     const db = getDatabase();
     const rows = db.getAllSync<TripSpeedSampleRow>(
       `SELECT * FROM trip_speed_samples
@@ -187,52 +190,27 @@ export const getTripSpeedSamples = async (
       tripId
     );
     return rows.map(rowToTripSpeedSample);
-  } catch {
-    return [];
-  }
 };
 
 export const recoverActiveTrip =
   async (): Promise<TripWithSpeedSamples | null> => {
-    try {
-      const db = getDatabase();
-      const row = db.getFirstSync<TripRow>(
-        `SELECT * FROM trips
-         WHERE deleted_at IS NULL AND record_status = 'draft'
-         ORDER BY started_at DESC
-         LIMIT 1`
-      );
-      if (!row) {
-        return null;
-      }
-
-      const trip = rowToTrip(row);
-      return {
-        ...trip,
-        speedSamples: await getTripSpeedSamples(trip.id),
-      };
-    } catch {
-      return null;
-    }
+    const sessions = await recoverRecordings();
+    const session = sessions[0];
+    return session ? { ...session.trip, speedSamples: await getTripSpeedSamples(session.trip.id) } : null;
   };
 
 export const getTripById = async (id: string): Promise<Trip | null> => {
-  try {
     const db = getDatabase();
     const row = db.getFirstSync<TripRow>(
       'SELECT * FROM trips WHERE id = ?',
       id
     );
     return row ? rowToTrip(row) : null;
-  } catch {
-    return null;
-  }
 };
 
 export const getRecentTripsWithSpeedSamples = async (
   limit = 50
 ): Promise<TripWithSpeedSamples[]> => {
-  try {
     const db = getDatabase();
     const trips = db
       .getAllSync<TripRow>(
@@ -242,7 +220,7 @@ export const getRecentTripsWithSpeedSamples = async (
          LIMIT ?`,
         Math.max(1, Math.round(limit))
       )
-      .map(rowToTrip);
+      .map((row) => ({ ...rowToTrip(row), recordingGaps: readRecordingGaps(db, row.id) }));
 
     return trips.map((trip) => {
       const rows = db.getAllSync<TripSpeedSampleRow>(
@@ -256,9 +234,22 @@ export const getRecentTripsWithSpeedSamples = async (
         speedSamples: rows.map(rowToTripSpeedSample),
       };
     });
-  } catch {
-    return [];
-  }
+};
+
+/** One read transaction keeps each exported summary, sample set and gap set consistent. */
+export const getLocalExportSnapshot = async (): Promise<TripWithSpeedSamples[]> => {
+  const db = getDatabase();
+  let result: TripWithSpeedSamples[] = [];
+  db.withTransactionSync(() => {
+    const rows = db.getAllSync<TripRow>(`SELECT * FROM trips
+      WHERE deleted_at IS NULL AND record_status='completed' ORDER BY started_at DESC,id DESC`);
+    result = rows.map((row) => ({
+      ...rowToTrip(row), recordingGaps: readRecordingGaps(db, row.id),
+      speedSamples: db.getAllSync<TripSpeedSampleRow>(`SELECT * FROM trip_speed_samples
+        WHERE trip_id=? ORDER BY sequence ASC,elapsed_ms ASC`, row.id).map(rowToTripSpeedSample),
+    }));
+  });
+  return result;
 };
 
 const insertTripSpeedSamples = (
@@ -326,71 +317,9 @@ const enqueueSyncOperationInDatabase = (
   return id;
 };
 
-export const appendTripSpeedSample = async (
-  sample: TripSpeedSample
-): Promise<void> => {
-  insertTripSpeedSamples([sample]);
-};
-
-export const createDraftTrip = async (trip: Trip): Promise<void> => {
-  const db = getDatabase();
-  const now = nowIso();
-  db.runSync(
-    `INSERT OR REPLACE INTO trips
-      (id, started_at, ended_at, total_distance_meters, max_speed_mps, average_speed_mps, units, mount_label, record_status, local_updated_at, deleted_at, cloud_sync_error, sync_status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, NULL, NULL, 'local')`,
-    trip.id,
-    trip.startedAt,
-    trip.endedAt,
-    trip.totalDistanceMeters,
-    trip.maxSpeedMps,
-    trip.averageSpeedMps,
-    trip.units,
-    trip.mountLabel ?? null,
-    now
-  );
-};
-
-export const saveTrip = async (
-  trip: Trip,
-  samples: TripSpeedSample[] = []
-): Promise<void> => {
-  const db = getDatabase();
-  const now = nowIso();
-  db.withTransactionSync(() => {
-    db.runSync(
-      `INSERT OR REPLACE INTO trips
-        (id, started_at, ended_at, total_distance_meters, max_speed_mps, average_speed_mps, units, mount_label, record_status, local_updated_at, deleted_at, cloud_sync_error, sync_status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, NULL, NULL, 'pending')`,
-      trip.id,
-      trip.startedAt,
-      trip.endedAt,
-      trip.totalDistanceMeters,
-      trip.maxSpeedMps,
-      trip.averageSpeedMps,
-      trip.units,
-      trip.mountLabel ?? null,
-      now
-    );
-
-    if (samples.length > 0) {
-      db.runSync('DELETE FROM trip_speed_samples WHERE trip_id = ?', trip.id);
-      insertTripSpeedSamples(samples, db);
-    }
-
-    enqueueSyncOperationInDatabase(db, {
-      operationType: 'sync_trip',
-      entityType: 'trip',
-      entityId: trip.id,
-      payload: { tripId: trip.id },
-    });
-  });
-};
-
 export const getPendingTripSpeedSamples = async (
   tripId: string
 ): Promise<TripSpeedSample[]> => {
-  try {
     const db = getDatabase();
     const rows = db.getAllSync<TripSpeedSampleRow>(
       `SELECT * FROM trip_speed_samples
@@ -399,9 +328,6 @@ export const getPendingTripSpeedSamples = async (
       tripId
     );
     return rows.map(rowToTripSpeedSample);
-  } catch {
-    return [];
-  }
 };
 
 export const markTripSpeedSamplesUploaded = async (
@@ -478,14 +404,14 @@ export const deleteTrip = async (id: string): Promise<void> => {
 export const clearTrips = async (): Promise<void> => {
   const db = getDatabase();
   const now = nowIso();
-  const rows = db.getAllSync<{ id: string }>(
-    `SELECT id FROM trips WHERE deleted_at IS NULL`
-  );
   db.withTransactionSync(() => {
+    const rows = db.getAllSync<{ id: string }>(
+      `SELECT id FROM trips WHERE deleted_at IS NULL AND record_status = 'completed'`
+    );
     db.runSync(
       `UPDATE trips
        SET deleted_at = ?, local_updated_at = ?, sync_status = 'pending'
-       WHERE deleted_at IS NULL`,
+       WHERE deleted_at IS NULL AND record_status = 'completed'`,
       now,
       now
     );
@@ -523,11 +449,10 @@ export const softDeleteTrip = async (id: string): Promise<void> => {
 
 export const getUnsyncedTrips =
   async (): Promise<TripWithSpeedSamples[]> => {
-    try {
       const db = getDatabase();
       const rows = db.getAllSync<TripRow>(
         `SELECT * FROM trips
-         WHERE sync_status IN ('local', 'pending', 'error')
+         WHERE record_status='completed' AND sync_status IN ('local', 'pending', 'error')
          ORDER BY local_updated_at ASC`
       );
 
@@ -543,9 +468,6 @@ export const getUnsyncedTrips =
           .map(rowToTripSpeedSample);
         return { ...trip, speedSamples: samples };
       });
-    } catch {
-      return [];
-    }
   };
 
 export const enqueueSyncOperation = async (input: {
@@ -560,7 +482,6 @@ export const enqueueSyncOperation = async (input: {
 export const getPendingSyncOperations = async (
   limit: number | null = 25
 ): Promise<SyncOutboxOperation[]> => {
-  try {
     const db = getDatabase();
     const rows = db.getAllSync<SyncOutboxRow>(
       `SELECT * FROM sync_outbox
@@ -572,9 +493,6 @@ export const getPendingSyncOperations = async (
       limit === null ? -1 : Math.max(1, Math.round(limit))
     );
     return rows.map(rowToOutboxOperation);
-  } catch {
-    return [];
-  }
 };
 
 export const markSyncOperationDone = async (id: string): Promise<void> => {
@@ -708,22 +626,21 @@ export const markTripSyncError = async (
 };
 
 export const getPendingSyncChangeCount = async (): Promise<number> => {
-  try {
     const db = getDatabase();
     const row = db.getFirstSync<{ count: number }>(
       `SELECT COUNT(*) AS count
        FROM trips
-       WHERE sync_status IN ('local', 'pending', 'error')`
+       WHERE record_status='completed' AND sync_status IN ('local', 'pending', 'error')`
     );
     return row?.count ?? 0;
-  } catch {
-    return 0;
-  }
 };
 
 export const importTripsMergeOnly = async (
   trips: TripWithSpeedSamples[]
 ): Promise<ImportTripsMergeResult> => {
+  if (trips.some((trip) => trip.recordStatus != null && trip.recordStatus !== 'completed')) {
+    throw new Error('Finish and save recordings before importing this file.');
+  }
   const db = getDatabase();
   const result: ImportTripsMergeResult = {
     tripsFound: trips.length,
@@ -748,6 +665,10 @@ export const importTripsMergeOnly = async (
 
       if (existing) {
         result.tripsSkipped += 1;
+        // Existing drafts, tombstones and completed history are independent
+        // local truth. An import must not append another file's samples/gaps.
+        result.samplesSkipped += trip.speedSamples.length;
+        continue;
       } else {
         db.runSync(
           `INSERT INTO trips
@@ -766,6 +687,7 @@ export const importTripsMergeOnly = async (
         );
         result.tripsImported += 1;
         changedTripIds.add(trip.id);
+        importRecordingGaps(db, trip, trip.recordingGaps ?? []);
       }
 
       const insertedSamples = insertTripSpeedSamples(

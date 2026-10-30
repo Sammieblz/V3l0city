@@ -15,6 +15,7 @@
     "test:coverage": "jest --ci --runInBand --coverage --coverageReporters=text-summary --coverageReporters=json-summary",
     "test:tooling": "node --test scripts/*.test.cjs",
     "test:speed-engine:cpp": "node scripts/run-speed-engine-tests.cjs",
+    "test:glance-projections": "node scripts/run-glance-projection-tests.cjs",
     "typecheck": "tsc --noEmit",
     "docs:check": "node scripts/check-docs.cjs",
     "server:dev": "tsx watch server/src/index.ts",

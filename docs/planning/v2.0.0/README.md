@@ -14,7 +14,10 @@ Planning baseline: October 5, 2026. This is a documentation-only proposal based 
 
 100 GitHub issues were created: one release tracker, 18 linked-checklist epics, 80 work items and one future-backlog container. 79 work items are included delivery requirements; one is an optional proximity-radio experiment requiring a documented ship-or-disable decision. The full source-defined included scope remains the v2.0.0 target.
 
-All actual issues are open and unassigned. No durations, delivery date, pricing, final group limits, cloud host, minimum OS or operational SLO/RPO/RTO have been selected. The PDF's free-eight cap is an example, not a policy. Priority is sequencing: P0 foundation/security/release gate; P1 required capability; P2 conditional experiment. P1 items remain required.
+At the planning baseline, all issues were open and unassigned. Current execution
+status is maintained in GitHub and the [implementation records](../../developer/README.md).
+SEC01 #29 is now completed after the reviewed foundation and security CI merges.
+No durations, delivery date, pricing, final group limits, cloud host, minimum OS or operational SLO/RPO/RTO have been selected. The PDF's free-eight cap is an example, not a policy. Priority is sequencing: P0 foundation/security/release gate; P1 required capability; P2 conditional experiment. P1 items remain required.
 
 ## Source and baseline
 

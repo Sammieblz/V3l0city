@@ -1,6 +1,7 @@
 import { File, Paths } from 'expo-file-system';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
+import * as Crypto from 'expo-crypto';
 
 import {
   buildExportPayload,
@@ -10,8 +11,7 @@ import {
   type ImportPreview,
 } from './exportFormat';
 import {
-  getTripSpeedSamples,
-  getTrips,
+  getLocalExportSnapshot,
   importTripsMergeOnly,
   type ImportTripsMergeResult,
 } from './tripRepository';
@@ -30,24 +30,29 @@ const timestamp = (): string => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}_${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`;
 };
 
+const writeExport = (extension: 'json' | 'csv', contents: string): File => {
+  const file = new File(Paths.document, `v3l0city_export_${timestamp()}_${Crypto.randomUUID()}.${extension}`);
+  // Each export is a new artifact. A failed retry must not truncate an earlier
+  // valid backup, even when both attempts happen in the same minute.
+  file.create({ overwrite: false });
+  try {
+    file.write(contents, { encoding: 'utf8' });
+  } catch (error) {
+    try { file.delete(); } catch { /* Keep the write failure; prior exports are untouched. */ }
+    throw error;
+  }
+  return file;
+};
+
 export const exportAsJson = async (): Promise<void> => {
   const [preferences, trips] = await Promise.all([
     getPreferences(),
-    getTrips(),
+    getLocalExportSnapshot(),
   ]);
-  const tripsWithSamples = await Promise.all(
-    trips.map(async (trip) => ({
-      ...trip,
-      speedSamples: await getTripSpeedSamples(trip.id),
-    }))
-  );
 
-  const payload = buildExportPayload(preferences, tripsWithSamples);
+  const payload = buildExportPayload(preferences, trips);
   const json = JSON.stringify(payload, null, 2);
-  const file = new File(Paths.document, `v3l0city_export_${timestamp()}.json`);
-
-  file.create({ overwrite: true });
-  file.write(json, { encoding: 'utf8' });
+  const file = writeExport('json', json);
 
   await Sharing.shareAsync(file.uri, {
     mimeType: 'application/json',
@@ -57,19 +62,14 @@ export const exportAsJson = async (): Promise<void> => {
 };
 
 export const exportAsCsv = async (): Promise<void> => {
-  const trips = await getTrips();
-  const tripSamples = await Promise.all(
-    trips.map(async (trip) => ({
+  const trips = await getLocalExportSnapshot();
+  const tripSamples = trips.map((trip) => ({
       tripId: trip.id,
-      samples: await getTripSpeedSamples(trip.id),
-    }))
-  );
+      samples: trip.speedSamples,
+    }));
 
   const csv = buildTripsCsv(trips, tripSamples);
-  const file = new File(Paths.document, `v3l0city_trips_${timestamp()}.csv`);
-
-  file.create({ overwrite: true });
-  file.write(csv, { encoding: 'utf8' });
+  const file = writeExport('csv', csv);
 
   await Sharing.shareAsync(file.uri, {
     mimeType: 'text/csv',

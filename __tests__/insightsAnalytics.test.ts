@@ -52,6 +52,23 @@ const makeSample = (
 });
 
 describe('insightsAnalytics', () => {
+  it('subtracts known gap time instead of attributing it to a surviving speed reading', () => {
+    const model = buildInsightsModel([makeTrip('trip-1', {
+      speedSamples: [makeSample(1), makeSample(2)],
+      recordingGaps: [{ id: 'gap', tripId: 'trip-1', reason: 'background',
+        startedAt: '2026-05-18T14:00:01.250Z', endedAt: '2026-05-18T14:00:01.750Z' }],
+    })], 'km/h');
+    expect(model.heatmapCells.reduce((sum, cell) => sum + cell.activityMs, 0)).toBe(1000);
+  });
+
+  it('does not invent movement over a recovered trip with no surviving samples', () => {
+    const trip = makeTrip('trip-1');
+    trip.recordingGaps = [{ id: 'gap', tripId: trip.id, reason: 'restart',
+      startedAt: trip.startedAt, endedAt: trip.endedAt }];
+    const model = buildInsightsModel([trip], 'km/h');
+    expect(model.heatmapCells.every((cell) => cell.activityMs === 0)).toBe(true);
+    expect(model.summary.totalDistanceMeters).toBe(trip.totalDistanceMeters);
+  });
   it('builds an empty analytics model', () => {
     const model = buildInsightsModel([], 'km/h');
 

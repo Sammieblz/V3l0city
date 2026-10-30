@@ -24,11 +24,8 @@ private struct LiveDriveSession {
   var tripId: String?
   var units: String
   var tripPaused: Bool
-  var distanceOffsetMeters: Double
-  var maxSpeedBaselineMps: Double
   var startedAtMs: Double
   var simulationActive: Bool
-  var simulatedDistanceOffsetMeters: Double
 }
 
 public final class V3l0citySpeedEngineModule: Module {
@@ -43,6 +40,9 @@ public final class V3l0citySpeedEngineModule: Module {
   private var lastEmitTimestampMs = 0.0
   private var outputIntervalMs = 100.0
   private var liveDriveSession: LiveDriveSession?
+  private let liveSessionLock = NSRecursiveLock()
+  private var liveProjection = LiveDriveProjection()
+  private var tripAccumulating = true
   private var lastDriveSurfacePublishMs = 0.0
   private var lastWidgetReloadMs = 0.0
   private var simulatedDriveTimer: Timer?
@@ -75,6 +75,10 @@ public final class V3l0citySpeedEngineModule: Module {
 
     AsyncFunction("setTripAccumulation") { (active: Bool) in
       self.engineQueue.async {
+        self.liveSessionLock.lock()
+        defer { self.liveSessionLock.unlock() }
+        self.tripAccumulating = active
+        self.liveProjection.setAccumulating(active, timestampMs: Date().timeIntervalSince1970 * 1000.0)
         self.engine.setTripAccumulation(active)
       }
     }
@@ -131,13 +135,13 @@ public final class V3l0citySpeedEngineModule: Module {
     }
 
     OnAppEntersBackground {
-      if self.liveDriveSession == nil {
+      if !self.hasLiveDriveSession() {
         self.stopCollectors()
       }
     }
 
     OnDestroy {
-      if self.liveDriveSession == nil {
+      if !self.hasLiveDriveSession() {
         self.stopCollectors()
       }
     }
@@ -152,6 +156,10 @@ public final class V3l0citySpeedEngineModule: Module {
     outputIntervalMs = 1000.0 / outputRateHz
     lastEmitTimestampMs = 0
     engineQueue.async {
+      self.liveSessionLock.lock()
+      defer { self.liveSessionLock.unlock() }
+      self.tripAccumulating = accumulateTrip
+      self.liveProjection.setAccumulating(accumulateTrip, timestampMs: Date().timeIntervalSince1970 * 1000.0)
       self.engine.setOptionsWithStaleTimeoutMs(
         staleTimeoutMs,
         outputRateHz: outputRateHz,
@@ -192,8 +200,9 @@ public final class V3l0citySpeedEngineModule: Module {
 
   private func startLocationCollectors() {
     isStarted = true
-    locationManager.allowsBackgroundLocationUpdates = liveDriveSession != nil
-    locationManager.showsBackgroundLocationIndicator = liveDriveSession != nil
+    let hasSession = hasLiveDriveSession()
+    locationManager.allowsBackgroundLocationUpdates = hasSession
+    locationManager.showsBackgroundLocationIndicator = hasSession
     locationManager.startUpdatingLocation()
     if CLLocationManager.headingAvailable() {
       locationManager.headingFilter = kCLHeadingFilterNone
@@ -358,8 +367,10 @@ public final class V3l0citySpeedEngineModule: Module {
       }
       result[key] = entry.value
     }
+    liveSessionLock.lock()
     lastEngineState = body
     publishLiveDriveSurface(from: body, force: force)
+    liveSessionLock.unlock()
 
     DispatchQueue.main.async {
       self.sendEvent(speedUpdateEvent, body)
@@ -426,7 +437,9 @@ public final class V3l0citySpeedEngineModule: Module {
   }
 
   private func startLiveDriveSession(_ snapshot: [String: Any]) {
-    updateLiveSession(from: snapshot)
+    liveSessionLock.lock()
+    defer { liveSessionLock.unlock() }
+    guard updateLiveSession(from: snapshot) else { return }
     lastDriveSurfacePublishMs = 0
     let simulationActive = boolValue(snapshot, "simulationActive", fallback: false)
     if simulationActive {
@@ -438,25 +451,34 @@ public final class V3l0citySpeedEngineModule: Module {
       locationManager.allowsBackgroundLocationUpdates = true
       locationManager.showsBackgroundLocationIndicator = true
     }
-    writeDriveSurfaceSnapshot(snapshot)
+    let projected = projectedDriveSnapshot(snapshot)
+    writeDriveSurfaceSnapshot(projected)
     requestWidgetReload(force: true)
-    startTripLiveActivity(snapshot)
+    startTripLiveActivity(projected)
   }
 
   private func updateLiveDriveSession(_ snapshot: [String: Any]) {
+    liveSessionLock.lock()
+    defer { liveSessionLock.unlock() }
     guard liveDriveSession != nil || boolValue(snapshot, "tripActive", fallback: false) else {
       writeDriveSurfaceSnapshot(snapshot)
       return
     }
-    updateLiveSession(from: snapshot)
+    guard updateLiveSession(from: snapshot) else { return }
     if boolValue(snapshot, "simulationActive", fallback: false) {
       startSimulatedDriveTimer()
     }
-    writeDriveSurfaceSnapshot(snapshot)
+    writeDriveSurfaceSnapshot(projectedDriveSnapshot(snapshot))
   }
 
   private func stopLiveDriveSession(_ snapshot: [String: Any]) {
+    liveSessionLock.lock()
+    defer { liveSessionLock.unlock() }
+    if let session = liveDriveSession, let tripId = optionalStringValue(snapshot, "tripId"),
+       session.tripId != tripId { return }
     liveDriveSession = nil
+    liveProjection = LiveDriveProjection()
+    liveProjection.setAccumulating(tripAccumulating)
     lastDriveSurfacePublishMs = 0
     stopSimulatedDriveTimer()
     locationManager.allowsBackgroundLocationUpdates = false
@@ -479,25 +501,59 @@ public final class V3l0citySpeedEngineModule: Module {
     WidgetCenter.shared.reloadAllTimelines()
   }
 
-  private func updateLiveSession(from snapshot: [String: Any]) {
+  private func updateLiveSession(from snapshot: [String: Any]) -> Bool {
     let nowMs = Date().timeIntervalSince1970 * 1000.0
-    let engineDistanceMeters = doubleValue(lastEngineState, "distanceMeters", fallback: 0)
-    let snapshotDistanceMeters = doubleValue(snapshot, "distanceMeters", fallback: 0)
     let elapsedMs = doubleValue(snapshot, "elapsedMs", fallback: 0)
     let simulationActive = boolValue(snapshot, "simulationActive", fallback: false)
-    let simulatedDistanceOffsetMeters = simulationActive
-      ? snapshotDistanceMeters - simulatedDistance(at: elapsedMs / 1000.0)
-      : 0
+    let fresh = freshNativeState(lastEngineState, nowMs: nowMs)
+    let counter = simulationActive ? simulatedDistance(at: elapsedMs / 1000.0)
+      : fresh ? nullableDoubleValue(lastEngineState, "distanceMeters") : nil
+    let timestamp = simulationActive ? nowMs : fresh ? nullableDoubleValue(lastEngineState, "timestampMs") : nil
+    guard liveProjection.synchronize(
+      tripId: optionalStringValue(snapshot, "tripId"),
+      distanceMeters: doubleValue(snapshot, "distanceMeters", fallback: 0),
+      maxSpeedMps: doubleValue(snapshot, "maxSpeedMps", fallback: 0),
+      paused: boolValue(snapshot, "tripPaused", fallback: false),
+      snapshotAtMs: doubleValue(snapshot, "updatedAtMs", fallback: nowMs),
+      nativeCounter: counter, nativeTimestampMs: timestamp
+    ) else { return false }
     liveDriveSession = LiveDriveSession(
       tripId: optionalStringValue(snapshot, "tripId"),
       units: stringValue(snapshot, "units", fallback: "MPH"),
       tripPaused: boolValue(snapshot, "tripPaused", fallback: false),
-      distanceOffsetMeters: max(0, snapshotDistanceMeters - engineDistanceMeters),
-      maxSpeedBaselineMps: max(0, doubleValue(snapshot, "maxSpeedMps", fallback: 0) - doubleValue(lastEngineState, "maxSpeedMps", fallback: 0)),
       startedAtMs: nowMs - max(0, elapsedMs),
-      simulationActive: simulationActive,
-      simulatedDistanceOffsetMeters: simulatedDistanceOffsetMeters
+      simulationActive: simulationActive
     )
+    return true
+  }
+
+  private func hasLiveDriveSession() -> Bool {
+    liveSessionLock.lock()
+    defer { liveSessionLock.unlock() }
+    return liveDriveSession != nil
+  }
+
+  // Called under the session lock. A lagging JS refresh must not visibly
+  // replace already observed session movement/peak with an older summary.
+  private func projectedDriveSnapshot(_ snapshot: [String: Any]) -> [String: Any] {
+    var projected = snapshot
+    let units = stringValue(snapshot, "units", fallback: "MPH")
+    let elapsedMs = doubleValue(snapshot, "elapsedMs", fallback: 0)
+    let average = liveProjection.distanceMeters / max(1, elapsedMs / 1000.0)
+    projected["distanceMeters"] = liveProjection.distanceMeters
+    projected["distanceText"] = formattedDistance(liveProjection.distanceMeters, units: units)
+    projected["maxSpeedMps"] = liveProjection.maxSpeedMps
+    projected["maxSpeedText"] = formattedSpeed(liveProjection.maxSpeedMps, units: units)
+    projected["averageSpeedMps"] = average
+    projected["averageSpeedText"] = formattedSpeed(average, units: units)
+    return projected
+  }
+
+  private func freshNativeState(_ state: [String: Any], nowMs: Double) -> Bool {
+    let timestamp = doubleValue(state, "timestampMs", fallback: 0)
+    let fixAge = doubleValue(state, "fixAgeMs", fallback: 0)
+    return !boolValue(state, "stale", fallback: false) && timestamp.isFinite && timestamp > 0
+      && timestamp <= nowMs && nowMs - timestamp <= 3000 && fixAge.isFinite && fixAge >= 0 && fixAge < 3000
   }
 
   private func startSimulatedDriveTimer() {
@@ -538,6 +594,8 @@ public final class V3l0citySpeedEngineModule: Module {
   }
 
   private func publishSimulatedLiveDriveSurface() {
+    liveSessionLock.lock()
+    defer { liveSessionLock.unlock() }
     guard let session = liveDriveSession, session.simulationActive else {
       return
     }
@@ -546,9 +604,11 @@ public final class V3l0citySpeedEngineModule: Module {
     let elapsedMs = max(0, nowMs - session.startedAtMs)
     let elapsedSeconds = elapsedMs / 1000.0
     let speedMps = simulatedSpeed(at: elapsedSeconds)
-    let distanceMeters = max(0, session.simulatedDistanceOffsetMeters + simulatedDistance(at: elapsedSeconds))
-    let averageSpeedMps = elapsedSeconds > 1 ? distanceMeters / elapsedSeconds : 0
-    let maxSpeedMps = max(session.maxSpeedBaselineMps, simulatedMaxSpeed(at: elapsedSeconds))
+    liveProjection.observe(nativeCounter: simulatedDistance(at: elapsedSeconds), speedMps: speedMps,
+                           timestampMs: nowMs, fresh: true)
+    let distanceMeters = liveProjection.distanceMeters
+    let averageSpeedMps = distanceMeters / max(1, elapsedSeconds)
+    let maxSpeedMps = liveProjection.maxSpeedMps
     let headingDegrees = simulatedHeading(at: elapsedSeconds)
 
     let snapshot: [String: Any] = [
@@ -583,22 +643,28 @@ public final class V3l0citySpeedEngineModule: Module {
   }
 
   private func publishLiveDriveSurface(from state: [String: Any], force: Bool) {
+    liveSessionLock.lock()
+    defer { liveSessionLock.unlock() }
     guard let session = liveDriveSession else {
       return
     }
     let nowMs = Date().timeIntervalSince1970 * 1000.0
+    let speedMps = doubleValue(state, "speedMps", fallback: 0)
+    let timestamp = doubleValue(state, "timestampMs", fallback: 0)
+    // Future/corrupt timestamps cannot push the projection watermark forward.
+    if timestamp.isFinite && timestamp > 0 && timestamp <= nowMs {
+      liveProjection.observe(nativeCounter: doubleValue(state, "distanceMeters", fallback: 0), speedMps: speedMps,
+        timestampMs: timestamp, fresh: freshNativeState(state, nowMs: nowMs))
+    }
     if !force && nowMs - lastDriveSurfacePublishMs < driveSurfacePublishIntervalMs {
       return
     }
     lastDriveSurfacePublishMs = nowMs
 
-    let speedMps = doubleValue(state, "speedMps", fallback: 0)
-    let engineDistanceMeters = doubleValue(state, "distanceMeters", fallback: 0)
-    let distanceMeters = max(0, session.distanceOffsetMeters + engineDistanceMeters)
-    let stateMaxMps = doubleValue(state, "maxSpeedMps", fallback: 0)
-    let maxSpeedMps = max(session.maxSpeedBaselineMps, stateMaxMps)
+    let distanceMeters = liveProjection.distanceMeters
+    let maxSpeedMps = liveProjection.maxSpeedMps
     let elapsedMs = max(0, nowMs - session.startedAtMs)
-    let averageSpeedMps = elapsedMs > 1000 ? distanceMeters / (elapsedMs / 1000.0) : doubleValue(state, "averageSpeedMps", fallback: 0)
+    let averageSpeedMps = distanceMeters / max(1, elapsedMs / 1000.0)
     let headingDegrees = nullableDoubleValue(state, "headingDegrees")
     let quality = stringValue(state, "quality", fallback: "poor")
     let stale = boolValue(state, "stale", fallback: false)

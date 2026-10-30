@@ -11,6 +11,8 @@ by subsystem rather than by chronology.
   ticket progress, executed checks and remaining release gates.
 - [Quality Implementation Record](quality-implementation-record.md): the next
   chronological observability, test, documentation and PR CI work.
+- [Local Recording Implementation Record](local-recording-implementation-record.md):
+  durable recovery, SQLite migrations/cache work and remaining device evidence.
 - [Telemetry Observability](observability.md): safe correlation, bounded metrics,
   authenticated export and failure isolation.
 - [System Architecture](system-architecture.md): product constraints, runtime

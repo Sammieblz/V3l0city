@@ -27,41 +27,42 @@ const themePreferenceFrom = (value: string | undefined): ThemePreference =>
   value === 'light' || value === 'dark' ? value : 'system';
 
 export const getPreferences = async (): Promise<Preferences | null> => {
-  try {
-    const db = getDatabase();
-    const row = db.getFirstSync<PreferencesRow>(
-      'SELECT * FROM preferences WHERE id = 1'
-    );
-    if (!row) return null;
-    return {
-      units: row.units as Units,
-      mountIndex: row.mount_index,
-      autoStart: row.auto_start === 1,
-      autoSave: row.auto_save === 1,
-      orientationMode: row.orientation_mode as OrientationMode,
-      themePreference: themePreferenceFrom(row.theme_preference),
-    };
-  } catch {
-    return null;
-  }
+  const db = getDatabase();
+  const row = db.getFirstSync<PreferencesRow>(
+    'SELECT * FROM preferences WHERE id = 1'
+  );
+  if (!row) return null;
+  return {
+    units: row.units as Units,
+    mountIndex: row.mount_index,
+    autoStart: row.auto_start === 1,
+    autoSave: row.auto_save === 1,
+    orientationMode: row.orientation_mode as OrientationMode,
+    themePreference: themePreferenceFrom(row.theme_preference),
+  };
 };
 
 export const savePreferences = async (prefs: Preferences): Promise<void> => {
   const db = getDatabase();
-  db.runSync(
-    `UPDATE preferences SET
-      units = ?,
-      mount_index = ?,
-      auto_start = ?,
-      auto_save = ?,
-      orientation_mode = ?,
-      theme_preference = ?
-    WHERE id = 1`,
-    prefs.units,
-    prefs.mountIndex,
-    prefs.autoStart ? 1 : 0,
-    prefs.autoSave ? 1 : 0,
-    prefs.orientationMode,
-    prefs.themePreference
-  );
+  db.withTransactionSync(() => {
+    db.runSync(
+      `UPDATE preferences SET
+        units = ?,
+        mount_index = ?,
+        auto_start = ?,
+        auto_save = ?,
+        orientation_mode = ?,
+        theme_preference = ?
+      WHERE id = 1`,
+      prefs.units,
+      prefs.mountIndex,
+      prefs.autoStart ? 1 : 0,
+      prefs.autoSave ? 1 : 0,
+      prefs.orientationMode,
+      prefs.themePreference
+    );
+    // A retained legacy source must never overwrite a later explicit setting.
+    db.runSync(`INSERT INTO local_storage_metadata(key,value) VALUES('legacy_preferences_can_import','0')
+      ON CONFLICT(key) DO UPDATE SET value='0'`);
+  });
 };

@@ -28,6 +28,7 @@ import Svg, {
 } from 'react-native-svg';
 
 import { getRecentTripsWithSpeedSamples } from '../database/tripRepository';
+import LocalStorageStatus from './LocalStorageStatus';
 import type { HeatmapCell, TripChartPoint } from '../utils/insightsAnalytics';
 import {
   buildInsightsModel,
@@ -331,7 +332,8 @@ const SpeedTraceChart: React.FC<{
   data: TripChartPoint[];
   chartWidth: number;
   units: Units;
-}> = ({ data, chartWidth, units }) => {
+  hasGaps: boolean;
+}> = ({ data, chartWidth, units, hasGaps }) => {
   if (data.length < 2) {
     return <EmptyChart message="This trip does not have enough speed samples." />;
   }
@@ -354,14 +356,14 @@ const SpeedTraceChart: React.FC<{
       spacing={spacingValue}
       initialSpacing={8}
       endSpacing={16}
-      areaChart
-      curved
-      color={colors.accent}
+      areaChart={!hasGaps}
+      curved={!hasGaps}
+      color={hasGaps ? 'transparent' : colors.accent}
       startFillColor={colors.accent}
       endFillColor={colors.accent}
       startOpacity={0.26}
       endOpacity={0.02}
-      thickness={3}
+      thickness={hasGaps ? 0 : 3}
       dataPointsColor={colors.accent}
       dataPointsRadius={2}
       yAxisLabelSuffix={` ${units}`}
@@ -545,6 +547,11 @@ export const InsightsContent: React.FC<ContentProps> = ({
       showsVerticalScrollIndicator={false}
       contentContainerStyle={styles.content}
     >
+      {trips.some((trip) => trip.recordingGaps?.length) && (
+        <Text style={styles.gapNotice}>
+          Some recordings contain sampling gaps. Their speed traces show observed points only; heatmap time excludes known gaps.
+        </Text>
+      )}
       <AnimatedSection index={0} reducedMotion={reducedMotion}>
         <View style={styles.summaryGrid}>
           <SummaryCard
@@ -646,6 +653,7 @@ export const InsightsContent: React.FC<ContentProps> = ({
             data={speedTrace}
             chartWidth={chartWidth}
             units={units}
+            hasGaps={!!selectedTrip?.recordingGaps?.length}
           />
         </ChartPanel>
       </AnimatedSection>
@@ -673,16 +681,22 @@ export const InsightsContent: React.FC<ContentProps> = ({
 
 const InsightsScreen: React.FC<Props> = ({ units }) => {
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [trips, setTrips] = useState<TripWithSpeedSamples[]>([]);
 
   useEffect(() => {
     let mounted = true;
     setLoading(true);
+    setFailed(false);
     getRecentTripsWithSpeedSamples(MAX_TRIPS)
       .then((loadedTrips) => {
         if (mounted) {
           setTrips(loadedTrips);
         }
+      })
+      .catch(() => {
+        if (mounted) setFailed(true);
       })
       .finally(() => {
         if (mounted) {
@@ -693,12 +707,23 @@ const InsightsScreen: React.FC<Props> = ({ units }) => {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [attempt]);
+
+  if (failed && !loading) {
+    return (
+      <LocalStorageStatus
+        title="Trip insights couldn’t be opened"
+        message="Check available device storage, then try again."
+        onRetry={() => setAttempt((value) => value + 1)}
+      />
+    );
+  }
 
   return <InsightsContent trips={trips} units={units} loading={loading} />;
 };
 
 const createStyles = () => StyleSheet.create({
+  gapNotice: { color: colors.textSecondary, fontSize: 14, lineHeight: 20, marginBottom: spacing.md },
   centerState: {
     alignItems: 'center',
     flex: 1,

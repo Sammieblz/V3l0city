@@ -1,342 +1,170 @@
-# Local Data and Export
-
-V3l0city stores user preferences, saved trips, and detailed trip speed samples
-locally with Expo SQLite. Local data is the durable source of truth for the
-mobile app.
-
-Cloud sync metadata is local too. Cloud state is optional and must not become
-the source of truth for the current device.
-
-## Database Initialization
-
-Primary file:
-
-```text
-src/database/database.ts
-```
-
-Database name:
-
-```text
-velocity.db
-```
-
-Startup flow:
-
-1. `app/index.tsx` calls `initDatabase()`.
-2. `getDatabase()` opens `velocity.db` with `SQLite.openDatabaseSync`.
-3. `createTables()` creates all current tables if missing.
-4. `runMigrations()` adds newer columns if an older database already exists.
-5. `migrateFromAsyncStorage()` attempts a one-time migration from legacy keys.
-
-The app waits for this process before rendering `Speedometer`.
-
-## Tables
-
-### `schema_migrations`
-
-Tracks applied migration markers.
-
-Columns:
-
-- `id`
-- `applied_at`
-
-Current explicit marker:
-
-```text
-2026-05-19-trip-speed-sample-telemetry
-2026-05-26-trip-heading-diagnostics
-2026-05-27-offline-cloud-sync
-2026-07-29-theme-preference
-```
-
-### `preferences`
-
-Single-row table keyed by `id = 1`.
-
-Columns:
-
-- `units`
-- `mount_index`
-- `auto_start`
-- `auto_save`
-- `orientation_mode`
-- `theme_preference` (`system`, `light`, or `dark`; defaults to `system`)
-
-Repository:
-
-```text
-src/database/preferencesRepository.ts
-```
-
-Type:
-
-```ts
-type Preferences = {
-  units: Units;
-  mountIndex: number;
-  autoStart: boolean;
-  autoSave: boolean;
-  orientationMode: 'portrait' | 'landscape' | 'auto';
-  themePreference: 'system' | 'light' | 'dark';
-};
-```
-
-`theme_preference` is a device-local shell preference. It is available before
-sign-in and is not synchronized to a cloud profile. The migration adds the
-column with `system` as its safe default for existing installations.
-
-### `trips`
-
-One row per saved trip.
-
-Columns:
-
-- `id`
-- `started_at`
-- `ended_at`
-- `total_distance_meters`
-- `max_speed_mps`
-- `average_speed_mps`
-- `units`
-- `mount_label`
-- `record_status`
-- `local_updated_at`
-- `deleted_at`
-- `cloud_synced_at`
-- `cloud_sync_error`
-- `sync_status`
-
-Domain type:
-
-```text
-src/domain/trip.ts
-```
-
-Repository:
-
-```text
-src/database/tripRepository.ts
-```
-
-### `trip_speed_samples`
-
-Detailed per-trip timeline captured while recording.
-
-Columns:
-
-- `id`
-- `trip_id`
-- `sequence`
-- `recorded_at`
-- `elapsed_ms`
-- `speed_mps`
-- `distance_meters`
-- `heading_degrees`
-- `heading_source`
-- `heading_accuracy_degrees`
-- `heading_quality`
-- `heading_reasons`
-- `source`
-- `quality`
-- `quality_score`
-- `quality_reasons`
-- `gps_accuracy_meters`
-- `fix_age_ms`
-- `native_speed_used`
-- `is_moving`
-- `is_stopped`
-- `stale`
-- `uploaded_at`
-- `upload_error`
-
-Indexes:
-
-- `(trip_id, elapsed_ms)`
-- `(uploaded_at, trip_id, sequence)`
-- unique `(trip_id, sequence)`
-
-The table has a foreign key to `trips(id)` with cascade delete. Clearing trips
-also clears their samples.
-
-### `sync_outbox`
-
-Durable queue for optional cloud operations.
-
-Columns:
-
-- `id`
-- `operation_type`
-- `entity_type`
-- `entity_id`
-- `payload_json`
-- `status`
-- `attempt_count`
-- `last_error`
-- `created_at`
-- `updated_at`
-
-## Repository Functions
-
-`src/database/tripRepository.ts` exposes:
-
-- `getTrips()`
-- `getTripById(id)`
-- `getTripSpeedSamples(tripId)`
-- `createDraftTrip(trip)`
-- `appendTripSpeedSample(sample)`
-- `recoverActiveTrip()`
-- `saveTrip(trip, samples)`
-- `updateTrip(trip)`
-- `deleteTrip(id)`
-- `softDeleteTrip(id)`
-- `clearTrips()`
-- `getUnsyncedTrips()`
-- `enqueueSyncOperation(...)`
-- `markSyncOperationDone(id)`
-- `getPendingTripSpeedSamples(tripId)`
-- `markTripSpeedSamplesUploaded(tripId, throughSequence, uploadedAt)`
-- `markTripSpeedSamplesUploadError(tripId, fromSequence, message)`
-
-Important behavior:
-
-- `saveTrip()` writes the trip aggregate first.
-- If samples are provided, it deletes existing samples for that trip id and
-  inserts the provided sample list.
-- `createDraftTrip()` is called before the dashboard marks a trip active.
-- `appendTripSpeedSample()` writes each active sample immediately.
-- `recoverActiveTrip()` returns the newest unfinished draft trip after crash or
-  restart.
-- Pending samples are samples with `uploaded_at IS NULL`.
-- Upload error state does not block local trip history.
-
-## Trip Sample Lifecycle
-
-Active trip sample flow:
-
-```text
-VelocitySensorsState
-  -> speedometer.tsx 500 ms sampling effect
-  -> append sample to SQLite
-  -> in-memory currentTripSamples ref for final aggregate save
-  -> tripTelemetryService.recordSample
-  -> saveTrip(trip, samples)
-  -> trip_speed_samples
-```
-
-Sampling rules:
-
-- Samples are captured only during an active trip.
-- Samples are skipped while paused.
-- The interval is 500 ms.
-- Sequence starts at 1 for each trip.
-- Timestamp is never earlier than trip start.
-
-The app stores samples durably during the active trip. The in-memory sample list
-is a mirror, not the only copy.
-
-## Legacy AsyncStorage Migration
-
-Older versions used AsyncStorage keys:
-
-- `velocity.preferences`
-- `velocity.trips`
-
-`migrateFromAsyncStorage()` attempts to read these keys and insert valid data
-into SQLite. If migration succeeds, the legacy keys are removed.
-
-Failures are ignored. This is intentional because a bad legacy payload should
-not prevent the app from opening.
-
-## Non-Secret AsyncStorage State
-
-New durable trip data belongs in SQLite. AsyncStorage is reserved for small,
-non-secret install-level flags and legacy migration support.
-
-Current app-owned keys include:
-
-- `v3l0city:onboarding:local:v1`: first-install onboarding completion.
-
-Supabase sessions are not stored here; they use Expo SecureStore through the
-cloud auth adapter.
-
-## Export Architecture
-
-Primary files:
-
-```text
-src/database/exportService.ts
-src/database/exportFormat.ts
-```
-
-`exportService.ts` handles platform side effects:
-
-- Read trips.
-- Read samples.
-- Read preferences for JSON export.
-- Create a file with `expo-file-system`.
-- Open the share sheet with `expo-sharing`.
-
-`exportFormat.ts` handles pure formatting:
-
-- Build JSON payload.
-- Build CSV rows.
-- Escape CSV values.
-
-Keeping formatting pure makes export tests easy and avoids filesystem work in
-unit tests.
-
-## JSON Export
-
-JSON export includes:
-
-- export metadata
-- preferences
-- trips
-- each trip's `speedSamples`
-
-Use JSON when preserving the full diagnostic shape matters.
-
-## CSV Export
-
-CSV export includes:
-
-- trip summary rows
-- per-sample rows
-
-Use CSV when users need spreadsheet analysis.
-
-## Local-First Rules
-
-Any feature touching storage should follow these rules:
-
-- Local trip save must succeed without telemetry.
-- Telemetry upload errors must not delete local samples.
-- Cloud sync errors must not delete local samples.
-- Export should read from SQLite only, not from server state.
-- Deleting a trip should create a local tombstone before eventual cloud purge.
-- Schema changes need migrations for existing installs.
-- New persisted fields should be included in export if they help debugging or
-  user data portability.
-
-## Testing
-
-Relevant tests:
-
-```text
-__tests__/exportService.test.ts
-__tests__/TripHistory.test.tsx
-```
-
-Run:
-
-```bash
-npx jest --runInBand __tests__/exportService.test.ts __tests__/TripHistory.test.tsx
-```
-
-Run the full JS suite after schema or export changes:
-
-```bash
-npx jest --runInBand
-```
+# Local data and export
+
+Expo SQLite (`velocity.db`) owns personal recordings and preferences. Recording,
+history and export require no account or V3l0city backend. Connected replicas are
+separate display data; they cannot authorize an action.
+
+## Startup and migrations
+
+`app/index.tsx` opens storage before mounting the dashboard. Loading has readable
+status text. Initialization or preference-read failures show retry, not empty
+history or default settings. Future schemas ask the user to update. There is no
+automatic reset or database deletion.
+
+For storage-full failures, free device storage and retry. For unsupported schema
+versions, install a compatible newer app. For corruption or ambiguous migration
+history, retain the original database and legacy sources for recovery; do not
+edit version markers to force an upgrade. Repair must use a separately preserved
+copy and verified import/migration, not an automatic destructive reset.
+
+`sqliteMigrations.ts` owns ordered migrations, `PRAGMA user_version` and
+`local_schema_migrations`. Version 1 normalizes historical personal tables and
+adds columns before indexes; version 2 adds lifecycle checkpoints/gaps; version 3
+adds explicit ownership, legacy import receipts and scoped connected storage.
+
+All pending upgrades run in one transaction. Historical `schema_migrations`
+markers remain. Failed candidate connections are closed and never published as
+initialized. Unsupported versions, conflicting history, failed migrations and
+foreign-key violations preserve the file and report failure.
+
+Trip/sample IDs, positive unique sequences, upload acknowledgements, tombstones
+and cloud metadata survive. Only wholly unuploaded, zero-sequence legacy groups
+can be numbered by their existing elapsed-time/row-ID order. Ambiguous collisions
+stop migration; rows are never silently deleted or renumbered.
+
+## Personal recording lifecycle
+
+| Table | Purpose |
+| --- | --- |
+| `preferences` | Device units, mount, auto-start, orientation and appearance |
+| `trips` | Draft/completed summaries and legacy sync metadata |
+| `trip_speed_samples` | Readings, unique by trip and sequence |
+| `recording_states` | Confirmed phase, checkpoint and last confirmed sample |
+| `recording_gaps` | Explicit restart/background/pause/permission/sensor/sampling/storage gaps |
+| `sync_outbox` | Existing optional cloud work |
+| `recording_ownership` | Explicit provider/account association and adoption consent |
+
+`recordingRepository.ts` implements transactional lifecycle operations, re-exported
+by `tripRepository.ts`: `createDraftTrip`, `appendTripSpeedSample`,
+`checkpointRecording`, `setRecordingPaused`, `openRecordingGap`,
+`closeRecordingGap`, `recoverRecordings` and `saveTrip`.
+
+Parent rows are never replaced to retry start/save: replacement would cascade
+sample deletion. Samples and summaries checkpoint together. Completion and its
+single legacy outbox operation commit together. Completion retry returns the
+canonical persisted result. Recovery returns every unfinished recording paused,
+preserves confirmed totals/units/mount, derives missing legacy summaries from
+samples and records unknown intervals. The user chooses Resume or Save & end.
+Clearing History targets completed records and preserves unfinished drafts.
+
+The durable personal state machine is independent of shared-trip membership:
+
+| Current state and event | Confirmed outcome |
+| --- | --- |
+| Ready, no unfinished draft; Start | Insert one draft in `recording` state |
+| Recording; valid sample | Append sample and checkpoint summary together |
+| Recording; Pause | Persist `paused` and open the appropriate continuity gap |
+| Paused; explicit Resume | Close the gap and persist `recording`; establish a fresh counter anchor |
+| Recording or paused; Save | Persist `completed`, close the gap and enqueue completion once |
+| Restart | Recover every unfinished draft paused; preserve confirmed totals and mark uncertainty |
+| Write failure | Keep the last committed phase/data, hold subsequent writes and retry the original operation |
+| Completion replay | Return canonical saved state without another outbox operation |
+
+An interrupted transaction rolls back. Runtime loading/busy/error flags are
+controller state, not new durable recording phases. Joining/leaving a connected
+trip never implicitly authorizes mutation of this state machine.
+
+`src/recording/controller.ts` serializes phone, car and automatic actions. Local
+commits precede telemetry, notifications and native presentation effects; these
+effects cannot block completion. Failed samples retain their original sequence
+and time for retry. Strict reads report failure instead of returning empty data.
+
+Restored distance uses positive native-counter deltas from an explicit anchor;
+it is never blindly added to a possibly surviving native total. Samples require
+finite readings and valid ordered sensor times. Gaps never become invented rows.
+
+## Background durability boundary
+
+Existing native sensors, widgets and Live Activities remain. JS attempts a
+checkpoint and sampling-gap marker on the AppState transition; OS suspension can
+preempt it. Fresh readings resume
+foreground sampling. Proven native aggregate movement can be retained, but a
+widget snapshot is not a SQLite sample journal.
+Native glance-session projection has its own counter anchor and confirmed peak;
+it excludes cumulative values from an earlier session, preserves distance on
+counter resets, and freezes aggregation while paused. Framework-free Swift/Kotlin
+projection tests run in CI; the OS listener/lifecycle integration needs devices.
+
+Neither platform currently has a native durable per-sample journal. Suspension
+or termination can leave a gap after the last committed checkpoint. Do not claim
+continuous kill-safe recording. Physical iOS/Android permission, lock-screen,
+background and process-death checks remain gates in
+[#36](https://github.com/Sammieblz/V3l0city/issues/36).
+
+## Connected storage
+
+`connectedCache.ts` scopes caches by provider **and** account. Persisted
+generations reject responses issued before logout, account switching or
+invalidation. Revision/tombstone barriers prevent stale snapshots reappearing.
+Expiry bounds live and entitlement snapshots. Typed payloads contain display
+data, never bearer credentials, location publishing grants or room tokens.
+
+`connected_cache_scopes`, `connected_cache_entities`, `connected_cache_references`,
+`connected_cache_barriers`, `connected_cache_sync_state` and `connected_outbox`
+are separate from personal history. Cleanup preserves personal samples,
+ownership and the legacy outbox. Map SDK resource storage is outside this DB.
+Default internal retention bounds are 2,000 entities, 4,000 revision barriers,
+500 connected mutations and 32 account scopes per database. These are storage
+resource bounds, not product pricing or group-size policies. Expiry cleanup and
+indexed pagination have representative query-plan fixtures.
+
+The connected outbox is persistence infrastructure, not a dispatcher or permission
+decision. Later synchronization, block and membership flows must call invalidation
+seams and revalidate authority with the server. Cached entitlements never grant
+access. This work does not enable cloud backup or adopt existing accounts/data.
+
+## Legacy AsyncStorage import
+
+`legacyLocalImport.ts` validates `velocity.preferences` and `velocity.trips` completely
+and commits receipts with imported rows. Source keys are removed only after a
+matching successful receipt. Failed cleanup can be retried without duplication.
+Invalid or conflicting payloads remain available for recovery; parsing JSON alone
+never permits deletion. New trip data belongs in SQLite. Credentials remain in
+the secure-store boundary, never receipts or display caches.
+
+SQLite is not encrypted by an application-level cipher in this implementation.
+Its storage boundary is the OS application sandbox and platform device protection.
+Sensitive credentials stay in SecureStore. Export files are ordinary user data
+files, so this work does not claim encrypted backups. A different at-rest storage
+policy requires an explicit migration and device qualification.
+
+## Export and import
+
+`exportService.ts` handles File/Sharing/DocumentPicker side effects;
+`exportFormat.ts` handles formatting. `getLocalExportSnapshot()` reads completed,
+undeleted summaries, samples and gaps in one transaction. JSON also reads
+preferences. Any read failure stops file creation and sharing.
+Each export gets a unique filename. Failed writes remove only their new partial
+artifact and cannot overwrite a previous successful export.
+
+JSON contains `preferences` and `trips`, including `speedSamples` and optional
+`recordingGaps`. Older files without gaps remain supported. Invalid gap data is
+rejected instead of silently erased. CSV retains summary/sample sections and
+adds a separate gap section when needed.
+Insights show points without connecting lines for interrupted recordings and
+exclude known gap intervals from heatmap duration. Draft-file import is rejected;
+finish and save a recording before exporting/importing it.
+
+Import is merge-only. Existing IDs (including drafts and tombstones) retain all
+local data; imports cannot reopen, overwrite or append to them. New trips,
+samples, gaps and legacy sync operations import transactionally. Preferences are
+restored separately afterward; their failure does not undo imported trips.
+Retrying safely skips those existing IDs.
+
+## Verification
+
+Real SQLite fixtures cover historical/current upgrades, rollback, reopen,
+storage-full failure, recording retries and cache isolation. React/controller
+checks cover loading, recovery, serial actions and failed reads/exports. Run
+`npm run test:ci`, `npm run typecheck` and `npm run docs:check`. These checks do
+not replace physical-device qualification.

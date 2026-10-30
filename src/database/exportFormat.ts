@@ -1,4 +1,6 @@
 import type {
+  RecordingGap,
+  RecordingGapReason,
   Trip,
   TripHeadingSource,
   TripSignalQuality,
@@ -167,6 +169,37 @@ const coerceSample = (
   };
 };
 
+const gapReasons: ReadonlySet<string> = new Set<RecordingGapReason>([
+  'restart', 'background', 'paused', 'permission', 'sensor', 'storage', 'sampling',
+]);
+
+const parseRecordingGaps = (value: unknown, trip: Trip): RecordingGap[] | undefined => {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) throw new Error('This export contains invalid recording gaps.');
+  const ids = new Set<string>();
+  return value.map((gap): RecordingGap => {
+    if (!isRecord(gap) || !stringValue(gap.id) || ids.has(gap.id as string) ||
+        gap.tripId !== trip.id || typeof gap.reason !== 'string' || !gapReasons.has(gap.reason) ||
+        typeof gap.startedAt !== 'string' || !Number.isFinite(Date.parse(gap.startedAt)) ||
+        !Number.isFinite(Date.parse(trip.startedAt)) || !Number.isFinite(Date.parse(trip.endedAt)) ||
+        Date.parse(gap.startedAt) < Date.parse(trip.startedAt) || Date.parse(gap.startedAt) > Date.parse(trip.endedAt) ||
+        (gap.endedAt === null && trip.recordStatus !== 'draft') ||
+        (gap.endedAt !== null && (typeof gap.endedAt !== 'string' ||
+          !Number.isFinite(Date.parse(gap.endedAt)) || Date.parse(gap.endedAt) < Date.parse(gap.startedAt) ||
+          Date.parse(gap.endedAt) > Date.parse(trip.endedAt)))) {
+      throw new Error('This export contains invalid recording gaps.');
+    }
+    ids.add(gap.id as string);
+    return {
+      id: gap.id as string,
+      tripId: trip.id,
+      reason: gap.reason as RecordingGapReason,
+      startedAt: gap.startedAt,
+      endedAt: gap.endedAt as string | null,
+    };
+  });
+};
+
 export const parseExportPayload = (
   value: unknown
 ): V3l0cityExportPayload => {
@@ -180,12 +213,16 @@ export const parseExportPayload = (
       if (!trip || !isRecord(tripValue)) {
         return null;
       }
+      if (trip.recordStatus === 'draft') {
+        throw new Error('Finish and save recordings before importing this file.');
+      }
       const speedSamples = Array.isArray(tripValue.speedSamples)
         ? tripValue.speedSamples
             .map((sampleValue) => coerceSample(sampleValue, trip.id))
             .filter((sample): sample is TripSpeedSample => sample != null)
         : [];
-      return { ...trip, speedSamples };
+      const recordingGaps = parseRecordingGaps(tripValue.recordingGaps, trip);
+      return { ...trip, speedSamples, ...(recordingGaps ? { recordingGaps } : {}) };
     })
     .filter((trip): trip is TripWithSpeedSamples => trip != null);
 
@@ -319,11 +356,16 @@ export const buildTripsCsv = (
     )
   );
 
+  const gapRows = trips.flatMap((trip) => (trip.recordingGaps ?? []).map((gap) => [
+    escCsv(trip.id), escCsv(gap.id), gap.reason, escCsv(gap.startedAt), escCsv(gap.endedAt ?? ''),
+  ].join(',')));
+
   return [
     headers.join(','),
     ...rows,
     '',
     sampleHeaders.join(','),
     ...sampleRows,
+    ...(gapRows.length ? ['', 'Trip ID,Gap ID,Reason,Started At,Ended At', ...gapRows] : []),
   ].join('\n');
 };
